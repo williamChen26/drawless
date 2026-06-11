@@ -1,0 +1,104 @@
+@import "tldraw/tldraw.css";
+
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.canvas-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  min-height: 100vh;
+}
+
+.canvas-shell__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+.canvas-shell__brand {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-shell__toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.canvas-shell__pill,
+.canvas-shell__identity,
+.canvas-shell__share {
+  display: inline-flex;
+  align-items: center;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-shell__workspace {
+  position: relative;
+  min-height: 0;
+}
+
+.canvas-shell__workspace--message {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.canvas-shell__editor {
+  position: absolute;
+  inset: 0;
+}
+
+.canvas-shell__message {
+  width: min(520px, 100%);
+  padding: 16px;
+  border: 1px solid #ddd;
+}
+
+.canvas-shell__message strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.canvas-shell__message pre {
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
