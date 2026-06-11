@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",
     "build": "mastra build",
-    "start": "mastra start"
+    "start": "mastra start",
+    "smoke:room-client": "tsx src/mastra/scripts/smoke-room-client.ts"
   },
   "keywords": [],
   "author": "",
@@ -24,11 +25,16 @@
     "@mastra/loggers": "^1.1.2",
     "@mastra/memory": "^1.20.2",
     "@mastra/observability": "^1.14.1",
+    "@tldraw/sync-core": "5.0.1",
+    "tldraw": "5.0.1",
+    "ws": "^8.18.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
+    "@types/ws": "^8.18.1",
     "mastra": "^1.12.2",
+    "tsx": "^4.20.6",
     "typescript": "^6.0.3"
   }
 }

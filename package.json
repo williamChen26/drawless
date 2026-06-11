@@ -8,6 +8,7 @@
     "check": "pnpm --filter @drawless/shared test && pnpm --filter @drawless/shared typecheck && pnpm --filter @drawless/shared build && pnpm --filter @drawless/server test && pnpm --filter @drawless/server typecheck && pnpm --filter @drawless/server build && pnpm --filter @drawless/server smoke && pnpm --filter @drawless/web test:unit && pnpm --filter @drawless/web typecheck && pnpm --filter @drawless/web build",
     "dev": "pnpm --filter @drawless/web dev",
     "dev:server": "pnpm --filter @drawless/server dev",
+    "dev:agent": "pnpm --filter coworker dev",
     "test": "pnpm --filter @drawless/shared test && pnpm --filter @drawless/server test && pnpm --filter @drawless/web test:unit",
     "typecheck": "pnpm --filter @drawless/shared typecheck && pnpm --filter @drawless/server typecheck && pnpm --filter @drawless/web typecheck"
   }

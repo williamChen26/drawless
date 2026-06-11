@@ -138,6 +138,46 @@ coworker 不应该：
 - 把 LLM 生成结果直接当成画布事实。
 - 在没有用户确认和权限策略时直接大规模改画布。
 
+### 4.5 coworker 控制面 API
+
+coworker 是独立的 Mastra 服务，所以 web/server 需要一个明确入口通知它进入或退出某个 room。这个入口不应该绕过 server 的房间生命周期判断，也不应该让 web 直接控制 coworker。
+
+推荐使用 Mastra custom API routes 暴露最小控制面：
+
+```txt
+POST   /drawless/rooms/:roomId/coworker/start
+GET    /drawless/rooms/:roomId/coworker/status
+DELETE /drawless/rooms/:roomId/coworker/stop
+```
+
+控制链路：
+
+```mermaid
+sequenceDiagram
+  participant Web as "apps/web"
+  participant Server as "apps/server"
+  participant CoworkerApi as "apps/coworker custom API"
+  participant CoworkerClient as "coworker sync client"
+  participant Room as "tldraw sync room"
+
+  Web->>Server: 用户请求 coworker 进入 room
+  Server->>Server: 校验 room 生命周期和权限
+  Server->>CoworkerApi: POST /drawless/rooms/:roomId/coworker/start
+  CoworkerApi->>CoworkerClient: 创建或复用 room client
+  CoworkerClient->>Room: WebSocket 加入同一个 sync room
+  Room-->>CoworkerClient: 同步 tldraw document
+  CoworkerApi-->>Server: 返回 coworker 状态
+  Server-->>Web: 返回控制结果
+```
+
+约束：
+
+- `start` 必须幂等；同一个 room 已经有 coworker 时返回当前状态。
+- `status` 只返回轻量状态和统计，不返回完整 tldraw document。
+- `stop` 必须关闭 coworker 的 WebSocket client，并释放本地 room client。
+- 当前本地开发阶段 custom API 可设为 `requiresAuth: false`，生产环境需要改成 server 签名、内网访问或 Mastra auth。
+- web 不直接调用 coworker custom API；server 才是 room 生命周期和权限边界。
+
 ## 5. Coworker 的协作者身份
 
 coworker 应该有自己的协作者身份，而不是复用某个用户 session。
@@ -525,6 +565,7 @@ flowchart LR
 - coworker 作为客户端进入 room。
 - coworker 维护画布镜像。
 - coworker 通过 sync 写回。
+- coworker 通过 Mastra custom API 暴露 start/status/stop 控制面。
 
 server 只补充最小控制能力：
 
@@ -532,6 +573,7 @@ server 只补充最小控制能力：
 - coworker session 鉴权。
 - room 中 coworker 运行状态。
 - 必要的生命周期通知。
+- 后续由 server 通过 HTTP 调用 coworker custom API，不在 server 内直接 import coworker runtime。
 
 ## 11. MVP 阶段规划
 
@@ -969,6 +1011,8 @@ apps/web/src/
 4. 画布摘要从 `TLStore` snapshot 和 `store.listen` 的 changes 派生。
 5. coworker 写回画布时通过自己的 `TLStore.put/remove` 触发 sync，不直接改 server storage。
 6. MVP 先做显式触发的只读建议，再做常驻观察。
+7. coworker 需要 Mastra custom API routes 作为 room 生命周期控制面。
+8. web 不直接通知 coworker；由 server 判断 room 生命周期和权限后再调用 coworker 控制面。
 
 ### 17.2 仍需产品决策
 

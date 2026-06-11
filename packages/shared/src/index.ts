@@ -143,6 +143,89 @@ export interface DrawlessCoworkerRoomConfig {
 }
 
 /**
+ * coworker room client 在控制面中暴露的生命周期状态。
+ */
+export type DrawlessCoworkerRoomSessionStatus =
+  | "not_started"
+  | "starting"
+  | "online"
+  | "offline"
+  | "error"
+  | "stopped";
+
+/**
+ * server 请求 coworker 加入指定 room 时使用的参数。
+ */
+export interface DrawlessCoworkerStartRequest {
+  /** drawless server 的 HTTP 或 WebSocket 基础地址。 */
+  serverUrl: string;
+  /** coworker 当前运行实例 ID；不传时由 coworker 自动生成。 */
+  instanceId?: string | undefined;
+  /** coworker 在协同身份中展示的名称；不传时使用默认名称。 */
+  displayName?: string | undefined;
+  /** coworker 在协同身份中展示的颜色；不传时使用默认颜色。 */
+  color?: string | undefined;
+  /** 是否等待 coworker 完成首次 room hydration 后再返回。 */
+  waitUntilLoaded: boolean;
+  /** 等待首次 room hydration 的超时时间，单位毫秒。 */
+  timeoutMs: number;
+}
+
+/**
+ * coworker 从本地 TLStore 派生出的轻量 room 快照。
+ */
+export interface DrawlessCoworkerRoomSnapshotSummary {
+  /** coworker 所在的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** coworker 当前 sync session ID。 */
+  sessionId: DrawlessSessionId;
+  /** 当前 store 中的 record 总数。 */
+  recordCount: number;
+  /** 当前 store 中的 document record 数量。 */
+  documentRecordCount: number;
+  /** 当前 store 中的 shape record 数量。 */
+  shapeCount: number;
+  /** 当前 store 中的 presence record 数量。 */
+  presenceCount: number;
+  /** 快照生成时间，使用 ISO 字符串。 */
+  capturedAt: string;
+}
+
+/**
+ * coworker 控制面返回的 room session 状态。
+ */
+export interface DrawlessCoworkerRoomStatusResponse {
+  /** 状态所属的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** 当前 room 是否存在可用的 coworker session。 */
+  active: boolean;
+  /** coworker room session 当前状态。 */
+  status: DrawlessCoworkerRoomSessionStatus;
+  /** coworker 当前身份；未启动时为 null。 */
+  identity: DrawlessCoworkerIdentity | null;
+  /** coworker 最近一次轻量 store 快照；未启动或尚未加载时为 null。 */
+  snapshot: DrawlessCoworkerRoomSnapshotSummary | null;
+  /** 最近一次错误信息；没有错误时为 null。 */
+  lastError: string | null;
+  /** coworker session 启动时间，使用 ISO 字符串；未启动时为 null。 */
+  startedAt: string | null;
+  /** coworker session 最近更新时间，使用 ISO 字符串；未启动时为 null。 */
+  updatedAt: string | null;
+}
+
+/**
+ * coworker 控制面停止 room session 后返回的状态。
+ */
+export interface DrawlessCoworkerStopResponse {
+  /** 停止操作所属的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** 本次请求是否关闭了已有 coworker session。 */
+  stopped: boolean;
+  /** 停止后的 coworker room session 状态。 */
+  status: DrawlessCoworkerRoomSessionStatus;
+}
+
+/**
  * coworker 观察到的画布事件类型。
  */
 export type DrawlessCanvasObservationKind =
@@ -202,6 +285,123 @@ export interface DrawlessCanvasSummary {
   focus: DrawlessCanvasFocusContext;
   /** 摘要覆盖的最近画布观察事件。 */
   recentEvents: DrawlessCanvasObservationEvent[];
+}
+
+/**
+ * 从 tldraw shape 派生出的画布包围盒。
+ */
+export interface DrawlessCanvasBounds {
+  /** 包围盒左上角的 x 坐标。 */
+  x: number;
+  /** 包围盒左上角的 y 坐标。 */
+  y: number;
+  /** 包围盒宽度。 */
+  w: number;
+  /** 包围盒高度。 */
+  h: number;
+}
+
+/**
+ * coworker 理解画布节点时使用的粗粒度节点类型。
+ */
+export type DrawlessCanvasSemanticNodeKind =
+  | "text"
+  | "shape"
+  | "arrow"
+  | "frame"
+  | "group"
+  | "lane"
+  | "unknown";
+
+/**
+ * 从 tldraw shape 派生出的语义节点。
+ */
+export interface DrawlessCanvasSemanticNode {
+  /** 对应的 tldraw shape ID。 */
+  id: string;
+  /** coworker 用于理解画布语义的节点类型。 */
+  kind: DrawlessCanvasSemanticNodeKind;
+  /** tldraw 原始 shape type。 */
+  shapeType: string;
+  /** 从 shape props 中提取的文本；没有文本时为 null。 */
+  text: string | null;
+  /** 从 shape 位置和尺寸派生出的包围盒。 */
+  bounds: DrawlessCanvasBounds;
+  /** tldraw parentId，用于表达 page、frame、group 等层级关系。 */
+  parentId: string;
+  /** 节点所属 page ID；无法直接判断时为 null。 */
+  pageId: string | null;
+}
+
+/**
+ * 语义边的方向。
+ */
+export type DrawlessCanvasSemanticEdgeDirection =
+  | "forward"
+  | "reverse"
+  | "bidirectional"
+  | "unknown";
+
+/**
+ * 从箭头或连接关系派生出的语义边。
+ */
+export interface DrawlessCanvasSemanticEdge {
+  /** 语义边 ID，通常复用对应的 arrow shape ID。 */
+  id: string;
+  /** 起点 shape ID；无法识别时为 null。 */
+  fromId: string | null;
+  /** 终点 shape ID；无法识别时为 null。 */
+  toId: string | null;
+  /** 箭头上的文本标签；没有标签时为 null。 */
+  label: string | null;
+  /** 连接方向。 */
+  direction: DrawlessCanvasSemanticEdgeDirection;
+  /** 产生这条语义边的 tldraw record ID。 */
+  recordId: string;
+}
+
+/**
+ * coworker 理解容器区域时使用的粗粒度区域类型。
+ */
+export type DrawlessCanvasSemanticRegionKind =
+  | "frame"
+  | "group"
+  | "cluster"
+  | "swimlane"
+  | "unknown";
+
+/**
+ * 从 frame、group 或空间包含关系派生出的语义区域。
+ */
+export interface DrawlessCanvasSemanticRegion {
+  /** 区域 ID，通常复用对应的容器 shape ID。 */
+  id: string;
+  /** coworker 用于理解区域语义的区域类型。 */
+  kind: DrawlessCanvasSemanticRegionKind;
+  /** 区域标题；没有标题时为 null。 */
+  title: string | null;
+  /** 区域在画布上的包围盒。 */
+  bounds: DrawlessCanvasBounds;
+  /** 当前判断属于该区域的 shape ID 列表。 */
+  shapeIds: string[];
+}
+
+/**
+ * 从 tldraw document 派生出的画布语义图。它只作为观察视图，不作为新的画布事实源。
+ */
+export interface DrawlessCanvasSemanticGraph {
+  /** 语义图所属的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** 语义图生成时间，使用 ISO 字符串。 */
+  generatedAt: string;
+  /** 当前 page ID；无法确定时为 null。 */
+  currentPageId: string | null;
+  /** 从 shape 派生出的语义节点列表。 */
+  nodes: DrawlessCanvasSemanticNode[];
+  /** 从箭头或绑定关系派生出的语义边列表。 */
+  edges: DrawlessCanvasSemanticEdge[];
+  /** 从 frame、group 或布局关系派生出的语义区域列表。 */
+  regions: DrawlessCanvasSemanticRegion[];
 }
 
 /**
@@ -338,6 +538,64 @@ export const coworkerRoomConfigSchema = z.object({
   maxInterventionLevel: interventionLevelSchema
 }) satisfies z.ZodType<DrawlessCoworkerRoomConfig>;
 
+export const coworkerRoomSessionStatusSchema = z.enum([
+  "not_started",
+  "starting",
+  "online",
+  "offline",
+  "error",
+  "stopped"
+]);
+
+const serverUrlSchema = z
+  .string()
+  .trim()
+  .min(1, "Server url cannot be empty.")
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return ["http:", "https:", "ws:", "wss:"].includes(url.protocol);
+    } catch {
+      return false;
+    }
+  }, "Server url must use http, https, ws, or wss protocol.");
+
+export const coworkerStartRequestSchema = z.object({
+  serverUrl: serverUrlSchema,
+  instanceId: z.string().trim().min(1).optional(),
+  displayName: z.string().trim().min(1).optional(),
+  color: z.string().trim().min(1).optional(),
+  waitUntilLoaded: z.boolean().default(true),
+  timeoutMs: z.number().int().min(500).max(30_000).default(8_000)
+}) satisfies z.ZodType<DrawlessCoworkerStartRequest>;
+
+export const coworkerRoomSnapshotSummarySchema = z.object({
+  roomId: roomIdSchema,
+  sessionId: coworkerSessionIdSchema,
+  recordCount: z.number().int().min(0),
+  documentRecordCount: z.number().int().min(0),
+  shapeCount: z.number().int().min(0),
+  presenceCount: z.number().int().min(0),
+  capturedAt: z.string().datetime()
+}) satisfies z.ZodType<DrawlessCoworkerRoomSnapshotSummary>;
+
+export const coworkerRoomStatusResponseSchema = z.object({
+  roomId: roomIdSchema,
+  active: z.boolean(),
+  status: coworkerRoomSessionStatusSchema,
+  identity: coworkerIdentitySchema.nullable(),
+  snapshot: coworkerRoomSnapshotSummarySchema.nullable(),
+  lastError: z.string().nullable(),
+  startedAt: z.string().datetime().nullable(),
+  updatedAt: z.string().datetime().nullable()
+}) satisfies z.ZodType<DrawlessCoworkerRoomStatusResponse>;
+
+export const coworkerStopResponseSchema = z.object({
+  roomId: roomIdSchema,
+  stopped: z.boolean(),
+  status: coworkerRoomSessionStatusSchema
+}) satisfies z.ZodType<DrawlessCoworkerStopResponse>;
+
 export const canvasObservationEventSchema = z.object({
   roomId: roomIdSchema,
   eventId: z.string().trim().min(1),
@@ -362,6 +620,74 @@ export const canvasSummarySchema = z.object({
   focus: canvasFocusContextSchema,
   recentEvents: z.array(canvasObservationEventSchema)
 }) satisfies z.ZodType<DrawlessCanvasSummary>;
+
+export const canvasBoundsSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  w: z.number(),
+  h: z.number()
+}) satisfies z.ZodType<DrawlessCanvasBounds>;
+
+export const canvasSemanticNodeKindSchema = z.enum([
+  "text",
+  "shape",
+  "arrow",
+  "frame",
+  "group",
+  "lane",
+  "unknown"
+]);
+
+export const canvasSemanticEdgeDirectionSchema = z.enum([
+  "forward",
+  "reverse",
+  "bidirectional",
+  "unknown"
+]);
+
+export const canvasSemanticRegionKindSchema = z.enum([
+  "frame",
+  "group",
+  "cluster",
+  "swimlane",
+  "unknown"
+]);
+
+export const canvasSemanticNodeSchema = z.object({
+  id: z.string().trim().min(1),
+  kind: canvasSemanticNodeKindSchema,
+  shapeType: z.string().trim().min(1),
+  text: z.string().trim().min(1).nullable(),
+  bounds: canvasBoundsSchema,
+  parentId: z.string().trim().min(1),
+  pageId: z.string().trim().min(1).nullable()
+}) satisfies z.ZodType<DrawlessCanvasSemanticNode>;
+
+export const canvasSemanticEdgeSchema = z.object({
+  id: z.string().trim().min(1),
+  fromId: z.string().trim().min(1).nullable(),
+  toId: z.string().trim().min(1).nullable(),
+  label: z.string().trim().min(1).nullable(),
+  direction: canvasSemanticEdgeDirectionSchema,
+  recordId: z.string().trim().min(1)
+}) satisfies z.ZodType<DrawlessCanvasSemanticEdge>;
+
+export const canvasSemanticRegionSchema = z.object({
+  id: z.string().trim().min(1),
+  kind: canvasSemanticRegionKindSchema,
+  title: z.string().trim().min(1).nullable(),
+  bounds: canvasBoundsSchema,
+  shapeIds: z.array(z.string().trim().min(1))
+}) satisfies z.ZodType<DrawlessCanvasSemanticRegion>;
+
+export const canvasSemanticGraphSchema = z.object({
+  roomId: roomIdSchema,
+  generatedAt: z.string().datetime(),
+  currentPageId: z.string().trim().min(1).nullable(),
+  nodes: z.array(canvasSemanticNodeSchema),
+  edges: z.array(canvasSemanticEdgeSchema),
+  regions: z.array(canvasSemanticRegionSchema)
+}) satisfies z.ZodType<DrawlessCanvasSemanticGraph>;
 
 export const canvasOperationDraftSchema = z.object({
   operationType: canvasOperationTypeSchema,

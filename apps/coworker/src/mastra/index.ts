@@ -6,9 +6,13 @@ import { DuckDBStore } from "@mastra/duckdb";
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } from '@mastra/observability';
 import { drawlessCoworker } from './agents/drawless-coworker';
+import { coworkerRoomApiRoutes } from './routes/coworker-room-routes';
 
 export const mastra = new Mastra({
   agents: { drawlessCoworker },
+  server: {
+    apiRoutes: coworkerRoomApiRoutes,
+  },
   storage: new MastraCompositeStore({
     id: 'composite-storage',
     default: new LibSQLStore({
@@ -28,11 +32,11 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'mastra',
         exporters: [
-          new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra Platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
+          new MastraStorageExporter(), // 将 observability events 持久化到 Mastra Storage。
+          new MastraPlatformExporter(), // 配置 MASTRA_PLATFORM_ACCESS_TOKEN 后发送到 Mastra Platform。
         ],
         spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+          new SensitiveDataFilter(), // 脱敏密码、token、key 等敏感字段。
         ],
       },
     },

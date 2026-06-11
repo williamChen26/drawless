@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canvasSemanticGraphSchema,
   canvasSummarySchema,
   coworkerIdentitySchema,
   coworkerInterventionDraftSchema,
+  coworkerRoomStatusResponseSchema,
+  coworkerStartRequestSchema,
+  coworkerStopResponseSchema,
   createDrawlessCoworkerSessionId,
   parseDrawlessRoomId,
   parseDrawlessCoworkerSessionId,
@@ -52,6 +56,68 @@ describe("drawless shared contracts", () => {
     });
   });
 
+  it("validates coworker room control contracts", () => {
+    const startRequest = coworkerStartRequestSchema.parse({
+      serverUrl: "http://127.0.0.1:3001"
+    });
+
+    expect(startRequest).toMatchObject({
+      serverUrl: "http://127.0.0.1:3001",
+      waitUntilLoaded: true,
+      timeoutMs: 8000
+    });
+    expect(
+      coworkerStartRequestSchema.safeParse({
+        serverUrl: "file:///tmp/drawless"
+      }).success
+    ).toBe(false);
+
+    const sessionId = createDrawlessCoworkerSessionId({
+      roomId: "alpha",
+      instanceId: "instance-1"
+    });
+    const status = coworkerRoomStatusResponseSchema.parse({
+      roomId: "alpha",
+      active: true,
+      status: "online",
+      identity: {
+        roomId: "alpha",
+        sessionId,
+        displayName: "Drawless Coworker",
+        color: "#2563eb",
+        instanceId: "instance-1"
+      },
+      snapshot: {
+        roomId: "alpha",
+        sessionId,
+        recordCount: 6,
+        documentRecordCount: 2,
+        shapeCount: 0,
+        presenceCount: 0,
+        capturedAt: "2026-06-11T00:00:00.000Z"
+      },
+      lastError: null,
+      startedAt: "2026-06-11T00:00:00.000Z",
+      updatedAt: "2026-06-11T00:00:01.000Z"
+    });
+
+    expect(status.snapshot?.recordCount).toBe(6);
+    expect(
+      coworkerRoomStatusResponseSchema.safeParse({
+        ...status,
+        status: "connected"
+      }).success
+    ).toBe(false);
+
+    expect(
+      coworkerStopResponseSchema.parse({
+        roomId: "alpha",
+        stopped: true,
+        status: "stopped"
+      })
+    ).toMatchObject({ stopped: true });
+  });
+
   it("validates canvas summaries and observation events", () => {
     const summary = canvasSummarySchema.parse({
       roomId: "alpha",
@@ -81,6 +147,58 @@ describe("drawless shared contracts", () => {
       canvasSummarySchema.safeParse({
         ...summary,
         recentEvents: [{ ...summary.recentEvents[0], kind: "bad_kind" }]
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates canvas semantic graphs", () => {
+    const graph = canvasSemanticGraphSchema.parse({
+      roomId: "alpha",
+      generatedAt: "2026-06-11T00:00:00.000Z",
+      currentPageId: "page:page",
+      nodes: [
+        {
+          id: "shape:goal",
+          kind: "text",
+          shapeType: "text",
+          text: "项目目标",
+          bounds: { x: 10, y: 20, w: 120, h: 40 },
+          parentId: "page:page",
+          pageId: "page:page"
+        }
+      ],
+      edges: [
+        {
+          id: "shape:arrow",
+          fromId: "shape:goal",
+          toId: "shape:task",
+          label: "拆解为",
+          direction: "forward",
+          recordId: "shape:arrow"
+        }
+      ],
+      regions: [
+        {
+          id: "shape:frame",
+          kind: "frame",
+          title: "项目区域",
+          bounds: { x: 0, y: 0, w: 400, h: 300 },
+          shapeIds: ["shape:goal"]
+        }
+      ]
+    });
+
+    expect(graph.edges[0]?.fromId).toBe("shape:goal");
+    expect(
+      canvasSemanticGraphSchema.safeParse({
+        ...graph,
+        nodes: [{ ...graph.nodes[0], kind: "mindmap" }]
+      }).success
+    ).toBe(false);
+    expect(
+      canvasSemanticGraphSchema.safeParse({
+        ...graph,
+        edges: [{ ...graph.edges[0], direction: "sideways" }]
       }).success
     ).toBe(false);
   });
