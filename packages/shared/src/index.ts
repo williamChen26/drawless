@@ -42,6 +42,22 @@ export interface DrawlessServerConfig {
   syncRoute: string;
   /** 允许访问协同服务的显式浏览器来源列表。 */
   allowedOrigins: string[];
+  /** server 调用 coworker 控制面的配置。 */
+  coworker: DrawlessCoworkerControlConfig;
+}
+
+/**
+ * server 调用 coworker Mastra custom API 时使用的控制面配置。
+ */
+export interface DrawlessCoworkerControlConfig {
+  /** 当前 server 是否允许通过控制面启动或停止 coworker。 */
+  enabled: boolean;
+  /** coworker Mastra 服务的 HTTP 基础地址；未启用时为 null。 */
+  baseUrl: string | null;
+  /** coworker 连接 drawless sync room 时使用的 server 基础地址。 */
+  serverUrl: string;
+  /** server 调用 coworker 控制面的超时时间，单位毫秒。 */
+  requestTimeoutMs: number;
 }
 
 /**
@@ -169,6 +185,22 @@ export interface DrawlessCoworkerStartRequest {
   waitUntilLoaded: boolean;
   /** 等待首次 room hydration 的超时时间，单位毫秒。 */
   timeoutMs: number;
+}
+
+/**
+ * web 或 server API 请求启动 coworker 时允许传入的可控参数。
+ */
+export interface DrawlessServerCoworkerStartRequest {
+  /** coworker 当前运行实例 ID；不传时由 coworker 自动生成。 */
+  instanceId?: string | undefined;
+  /** coworker 在协同身份中展示的名称；不传时使用默认名称。 */
+  displayName?: string | undefined;
+  /** coworker 在协同身份中展示的颜色；不传时使用默认颜色。 */
+  color?: string | undefined;
+  /** 是否等待 coworker 完成首次 room hydration 后再返回；不传时由 server 决定默认值。 */
+  waitUntilLoaded?: boolean | undefined;
+  /** 等待首次 room hydration 的超时时间，单位毫秒；不传时由 server 决定默认值。 */
+  timeoutMs?: number | undefined;
 }
 
 /**
@@ -568,6 +600,21 @@ export const coworkerStartRequestSchema = z.object({
   waitUntilLoaded: z.boolean().default(true),
   timeoutMs: z.number().int().min(500).max(30_000).default(8_000)
 }) satisfies z.ZodType<DrawlessCoworkerStartRequest>;
+
+export const coworkerControlConfigSchema = z.object({
+  enabled: z.boolean(),
+  baseUrl: serverUrlSchema.nullable(),
+  serverUrl: serverUrlSchema,
+  requestTimeoutMs: z.number().int().min(500).max(60_000)
+}) satisfies z.ZodType<DrawlessCoworkerControlConfig>;
+
+export const serverCoworkerStartRequestSchema = z.object({
+  instanceId: z.string().trim().min(1).optional(),
+  displayName: z.string().trim().min(1).optional(),
+  color: z.string().trim().min(1).optional(),
+  waitUntilLoaded: z.boolean().optional(),
+  timeoutMs: z.number().int().min(500).max(30_000).optional()
+}) satisfies z.ZodType<DrawlessServerCoworkerStartRequest>;
 
 export const coworkerRoomSnapshotSummarySchema = z.object({
   roomId: roomIdSchema,

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canvasSemanticGraphSchema,
   canvasSummarySchema,
+  coworkerControlConfigSchema,
   coworkerIdentitySchema,
   coworkerInterventionDraftSchema,
   coworkerRoomStatusResponseSchema,
@@ -11,7 +12,8 @@ import {
   createDrawlessCoworkerSessionId,
   parseDrawlessRoomId,
   parseDrawlessCoworkerSessionId,
-  parseDrawlessSessionId
+  parseDrawlessSessionId,
+  serverCoworkerStartRequestSchema
 } from "../index.js";
 
 describe("drawless shared contracts", () => {
@@ -116,6 +118,30 @@ describe("drawless shared contracts", () => {
         status: "stopped"
       })
     ).toMatchObject({ stopped: true });
+
+    expect(
+      coworkerControlConfigSchema.parse({
+        enabled: true,
+        baseUrl: "http://127.0.0.1:4111",
+        serverUrl: "http://127.0.0.1:3001",
+        requestTimeoutMs: 10000
+      })
+    ).toMatchObject({ enabled: true });
+    expect(
+      coworkerControlConfigSchema.safeParse({
+        enabled: true,
+        baseUrl: "file:///tmp/coworker",
+        serverUrl: "http://127.0.0.1:3001",
+        requestTimeoutMs: 10000
+      }).success
+    ).toBe(false);
+
+    expect(
+      serverCoworkerStartRequestSchema.parse({
+        displayName: "Drawless Coworker",
+        waitUntilLoaded: false
+      })
+    ).toMatchObject({ waitUntilLoaded: false });
   });
 
   it("validates canvas summaries and observation events", () => {

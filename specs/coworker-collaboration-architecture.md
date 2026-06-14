@@ -178,6 +178,30 @@ sequenceDiagram
 - 当前本地开发阶段 custom API 可设为 `requiresAuth: false`，生产环境需要改成 server 签名、内网访问或 Mastra auth。
 - web 不直接调用 coworker custom API；server 才是 room 生命周期和权限边界。
 
+server 对外暴露的生命周期入口：
+
+```txt
+POST   /rooms/:roomId/coworker/start
+GET    /rooms/:roomId/coworker/status
+DELETE /rooms/:roomId/coworker/stop
+```
+
+这三条 route 只做 roomId 校验、coworker 开关判断、受控参数校验和 HTTP 转发；不会在 server 进程内创建 coworker runtime，也不会直接读取或修改 tldraw document。
+
+端到端联调命令：
+
+```bash
+pnpm smoke:coworker-control
+```
+
+该命令会先构建 coworker，再临时启动 coworker Mastra server 和 drawless server，最后通过 server 的 `/rooms/:roomId/coworker/start|status|stop` 验证 coworker 能经由控制面进入同一个 tldraw sync room。它需要占用本地端口并启动真实进程，因此不放入默认 `pnpm check`。
+
+web 显式控制入口：
+
+- 当前 web 顶部逻辑栏已提供 coworker `状态 / 进入 / 离开` 三个显式动作。
+- web 只调用 server 的 `/rooms/:roomId/coworker/*` 生命周期入口，不直接调用 coworker Mastra custom API。
+- 当前入口只控制 coworker 是否进入 room，不发送画布摘要给 LLM，也不触发 AI 推理或画布写入。
+
 ## 5. Coworker 的协作者身份
 
 coworker 应该有自己的协作者身份，而不是复用某个用户 session。
@@ -574,6 +598,9 @@ server 只补充最小控制能力：
 - room 中 coworker 运行状态。
 - 必要的生命周期通知。
 - 后续由 server 通过 HTTP 调用 coworker custom API，不在 server 内直接 import coworker runtime。
+- 当前实现已提供 server 侧 `/rooms/:roomId/coworker/start|status|stop` 入口，默认通过配置关闭，需要显式启用。
+- 当前实现已提供 `pnpm smoke:coworker-control`，用于验证 server 控制面到 coworker sync client 的真实端到端链路。
+- 当前实现已提供 web 顶部栏显式控制入口，仅用于手动查询、进入、离开 coworker。
 
 ## 11. MVP 阶段规划
 
@@ -1013,6 +1040,9 @@ apps/web/src/
 6. MVP 先做显式触发的只读建议，再做常驻观察。
 7. coworker 需要 Mastra custom API routes 作为 room 生命周期控制面。
 8. web 不直接通知 coworker；由 server 判断 room 生命周期和权限后再调用 coworker 控制面。
+9. server 侧 coworker control 默认关闭，只在显式配置后代理 start/status/stop 请求。
+10. 端到端联调使用显式 smoke 命令，不纳入默认 `pnpm check`。
+11. web 侧当前只提供显式生命周期按钮，不自动唤醒 coworker，也不触发 AI 推理。
 
 ### 17.2 仍需产品决策
 

@@ -7,7 +7,13 @@ describe("server config", () => {
     expect(loadServerConfig({})).toMatchObject({
       host: "127.0.0.1",
       port: 3001,
-      syncRoute: "/sync"
+      syncRoute: "/sync",
+      coworker: {
+        enabled: false,
+        baseUrl: null,
+        serverUrl: "http://127.0.0.1:3001",
+        requestTimeoutMs: 10000
+      }
     });
   });
 
@@ -16,5 +22,29 @@ describe("server config", () => {
     expect(() => loadServerConfig({ ALLOWED_ORIGINS: "*" })).toThrow(
       "ALLOWED_ORIGINS"
     );
+  });
+
+  it("loads coworker control configuration only when explicitly enabled", () => {
+    expect(
+      loadServerConfig({
+        HOST: "0.0.0.0",
+        PORT: "3002",
+        COWORKER_ENABLED: "true",
+        COWORKER_BASE_URL: "http://127.0.0.1:4111/",
+        SERVER_PUBLIC_URL: "http://127.0.0.1:3002/",
+        COWORKER_REQUEST_TIMEOUT_MS: "12000"
+      })
+    ).toMatchObject({
+      coworker: {
+        enabled: true,
+        baseUrl: "http://127.0.0.1:4111",
+        serverUrl: "http://127.0.0.1:3002",
+        requestTimeoutMs: 12000
+      }
+    });
+
+    expect(() =>
+      loadServerConfig({ COWORKER_ENABLED: "sometimes" })
+    ).toThrow("COWORKER_ENABLED");
   });
 });

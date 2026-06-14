@@ -49,7 +49,9 @@ select {
 .canvas-shell__toolbar {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   min-width: 0;
   font-size: 12px;
@@ -64,6 +66,33 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.canvas-shell__coworker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.canvas-shell__coworker-status {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-shell__coworker-action {
+  min-width: 44px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  color: #111;
+}
+
+.canvas-shell__coworker-action:disabled {
+  color: #777;
 }
 
 .canvas-shell__workspace {
