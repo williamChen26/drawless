@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canvasOperationPermissionSchema,
+  canvasOperationRequestSchema,
   canvasSemanticGraphSchema,
   canvasSummarySchema,
+  coworkerChatMessageSchema,
+  coworkerConversationRequestSchema,
+  coworkerConversationResponseSchema,
   coworkerControlConfigSchema,
   coworkerIdentitySchema,
-  coworkerInterventionDraftSchema,
+  coworkerRoomConfigSchema,
   coworkerRoomStatusResponseSchema,
   coworkerStartRequestSchema,
   coworkerStopResponseSchema,
@@ -142,6 +147,16 @@ describe("drawless shared contracts", () => {
         waitUntilLoaded: false
       })
     ).toMatchObject({ waitUntilLoaded: false });
+
+    expect(
+      coworkerRoomConfigSchema.parse({
+        roomId: "alpha",
+        enabled: true,
+        autoJoin: false,
+        allowProactiveCursorChat: true,
+        allowCanvasOperationRequests: true
+      })
+    ).toMatchObject({ allowProactiveCursorChat: true });
   });
 
   it("validates canvas summaries and observation events", () => {
@@ -229,30 +244,108 @@ describe("drawless shared contracts", () => {
     ).toBe(false);
   });
 
-  it("validates coworker intervention drafts", () => {
-    const draft = coworkerInterventionDraftSchema.parse({
-      draftId: "draft-1",
+  it("validates coworker chat messages and operation permission", () => {
+    const chatMessage = coworkerChatMessageSchema.parse({
+      messageId: "message-1",
       roomId: "alpha",
+      channel: "cursor_chat",
+      sender: "coworker",
+      senderSessionId: "coworker:alpha:instance-1",
+      intent: "question",
+      text: "这里要不要补一个问题列表？",
       createdAt: "2026-06-11T00:00:02.000Z",
-      level: "propose_action",
-      kind: "operation_draft",
-      message: "我建议补一个问题列表，帮助下一步讨论。",
-      operationDrafts: [
-        {
-          operationType: "create_note",
-          intent: "补充讨论入口",
-          targetDescription: "任务拆解区域右侧",
-          rationale: "当前区域缺少开放问题，容易影响后续推进。",
-          requiresUserConfirmation: true
-        }
-      ]
+      canvasContext: {
+        currentPageId: "page:page",
+        focusedRecordIds: ["shape:task"],
+        cursor: { x: 120, y: 240 },
+        summary: null
+      }
     });
 
-    expect(draft.operationDrafts[0]?.requiresUserConfirmation).toBe(true);
+    expect(chatMessage.canvasContext?.cursor).toEqual({ x: 120, y: 240 });
     expect(
-      coworkerInterventionDraftSchema.safeParse({
-        ...draft,
-        level: "auto_execute"
+      coworkerChatMessageSchema.safeParse({
+        ...chatMessage,
+        channel: "side_panel"
+      }).success
+    ).toBe(false);
+
+    const operationRequest = canvasOperationRequestSchema.parse({
+      requestId: "request-1",
+      roomId: "alpha",
+      channel: "cursor_chat",
+      messageId: "message-1",
+      createdAt: "2026-06-11T00:00:03.000Z",
+      operationType: "create_note",
+      description: "在任务拆解区域右侧新增一个问题列表。",
+      targetDescription: "任务拆解区域右侧",
+      riskLevel: "low"
+    });
+
+    expect(operationRequest.riskLevel).toBe("low");
+    expect(
+      canvasOperationRequestSchema.safeParse({
+        ...operationRequest,
+        riskLevel: "high"
+      }).success
+    ).toBe(false);
+
+    const permission = canvasOperationPermissionSchema.parse({
+      requestId: "request-1",
+      roomId: "alpha",
+      channel: "cursor_chat",
+      approvedBySessionId: "device:tab-1",
+      approvedMessageId: "message-2",
+      approvedText: "可以，帮我补上。",
+      approvedAt: "2026-06-11T00:00:04.000Z"
+    });
+
+    expect(permission.approvedBySessionId).toBe("device:tab-1");
+  });
+
+  it("validates coworker conversation requests and responses", () => {
+    const userMessage = coworkerChatMessageSchema.parse({
+      messageId: "message-user-1",
+      roomId: "alpha",
+      channel: "conversation_chat",
+      sender: "user",
+      senderSessionId: "device:tab-1",
+      intent: "message",
+      text: "帮我看看这个画布现在缺什么？",
+      createdAt: "2026-06-11T00:00:05.000Z",
+      canvasContext: null
+    });
+
+    const request = coworkerConversationRequestSchema.parse({
+      roomId: "alpha",
+      userMessage,
+      canvasSummary: null,
+      canvasSemanticGraph: null
+    });
+
+    expect(request.userMessage.sender).toBe("user");
+
+    const response = coworkerConversationResponseSchema.parse({
+      roomId: "alpha",
+      replyMessage: {
+        messageId: "message-coworker-1",
+        roomId: "alpha",
+        channel: "conversation_chat",
+        sender: "coworker",
+        senderSessionId: "coworker:alpha:instance-1",
+        intent: "message",
+        text: "我可以先基于画布摘要给你只读建议。",
+        createdAt: "2026-06-11T00:00:06.000Z",
+        canvasContext: null
+      },
+      operationRequest: null
+    });
+
+    expect(response.operationRequest).toBeNull();
+    expect(
+      coworkerConversationResponseSchema.safeParse({
+        ...response,
+        replyMessage: { ...response.replyMessage, sender: "system" }
       }).success
     ).toBe(false);
   });

@@ -71,6 +71,13 @@ export class DrawlessCoworkerRoomRegistry {
         entry.snapshot = snapshot;
         entry.updatedAt = new Date().toISOString();
       },
+      onCursorChat: (event) => {
+        // PoC 阶段只打日志和刷新生命周期时间；不把 cursor chat 保存成第二套对话事实源。
+        entry.updatedAt = new Date().toISOString();
+        console.info(
+          `[drawless coworker] observed cursor chat in ${roomId} from ${event.userName}: ${event.message}`
+        );
+      },
       onSyncError: (reason) => {
         entry.status = 'error';
         entry.lastError = reason;

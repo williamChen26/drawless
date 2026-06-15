@@ -154,8 +154,10 @@ export interface DrawlessCoworkerRoomConfig {
   enabled: boolean;
   /** coworker 是否允许在用户进入房间后自动加入。 */
   autoJoin: boolean;
-  /** coworker 当前允许的最高介入等级。 */
-  maxInterventionLevel: DrawlessInterventionLevel;
+  /** coworker 是否允许在观察画布后主动通过 cursor chat 交流。 */
+  allowProactiveCursorChat: boolean;
+  /** coworker 是否允许在聊天中请求操作画布。 */
+  allowCanvasOperationRequests: boolean;
 }
 
 /**
@@ -437,21 +439,78 @@ export interface DrawlessCanvasSemanticGraph {
 }
 
 /**
- * coworker 可以选择的介入等级。
+ * 用户和 coworker 交流时使用的聊天通道。
  */
-export type DrawlessInterventionLevel = "silent" | "suggest" | "propose_action";
+export type DrawlessCoworkerChatChannel =
+  | "cursor_chat"
+  | "conversation_chat";
 
 /**
- * coworker 介入结果的类型。
+ * 聊天消息的发送方。
  */
-export type DrawlessCoworkerInterventionKind =
+export type DrawlessCoworkerChatSender =
+  | "user"
+  | "coworker";
+
+/**
+ * 聊天消息在协作流程中的意图。
+ */
+export type DrawlessCoworkerChatIntent =
   | "message"
   | "question"
-  | "operation_draft"
-  | "canvas_operation";
+  | "operation_request"
+  | "operation_permission";
 
 /**
- * coworker 草拟的低风险画布操作类型。
+ * 用户或 coworker 在聊天通道中发送的一条消息。
+ */
+export interface DrawlessCoworkerChatMessage {
+  /** 消息 ID，用于去重、排序和排查问题。 */
+  messageId: string;
+  /** 消息所属的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** 消息发生在哪个聊天通道。 */
+  channel: DrawlessCoworkerChatChannel;
+  /** 消息发送方。 */
+  sender: DrawlessCoworkerChatSender;
+  /** 发送方的协同会话 ID。 */
+  senderSessionId: DrawlessSessionId;
+  /** 消息意图，用于区分普通聊天、提问、操作请求和用户允许。 */
+  intent: DrawlessCoworkerChatIntent;
+  /** 消息正文。 */
+  text: string;
+  /** 消息发生时间，使用 ISO 字符串。 */
+  createdAt: string;
+  /** 消息关联的画布上下文；没有上下文时为 null。 */
+  canvasContext: DrawlessCanvasChatContext | null;
+}
+
+/**
+ * 聊天消息发生时的画布上下文。
+ */
+export interface DrawlessCanvasChatContext {
+  /** 当前 page ID；无法确定时为 null。 */
+  currentPageId: string | null;
+  /** 消息发送时用户或 coworker 关注的 tldraw record ID 列表。 */
+  focusedRecordIds: string[];
+  /** cursor chat 在画布上的位置；conversation chat 没有位置时为 null。 */
+  cursor: DrawlessCanvasPoint | null;
+  /** 消息发生时可用的画布摘要；没有摘要时为 null。 */
+  summary: DrawlessCanvasSummary | null;
+}
+
+/**
+ * 画布上的一个点。
+ */
+export interface DrawlessCanvasPoint {
+  /** 画布坐标系中的 x 坐标。 */
+  x: number;
+  /** 画布坐标系中的 y 坐标。 */
+  y: number;
+}
+
+/**
+ * coworker 可以请求执行的低风险画布操作类型。
  */
 export type DrawlessCanvasOperationType =
   | "create_text"
@@ -461,39 +520,73 @@ export type DrawlessCanvasOperationType =
   | "update_text";
 
 /**
- * coworker 提出的单个画布操作草案。
+ * coworker 在聊天中提出的画布操作请求。
  */
-export interface DrawlessCanvasOperationDraft {
-  /** 草案中的操作类型。 */
+export interface DrawlessCanvasOperationRequest {
+  /** 操作请求 ID，用于用户允许和后续执行追踪。 */
+  requestId: string;
+  /** 请求所属的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** 请求来自哪个聊天通道。 */
+  channel: DrawlessCoworkerChatChannel;
+  /** 请求关联的 coworker 消息 ID。 */
+  messageId: string;
+  /** 请求创建时间，使用 ISO 字符串。 */
+  createdAt: string;
+  /** coworker 想执行的低风险操作类型。 */
   operationType: DrawlessCanvasOperationType;
-  /** 这次操作想帮助用户完成的目标。 */
-  intent: string;
-  /** 操作目标对象或区域的文字描述。 */
+  /** coworker 用自然语言说明想做什么。 */
+  description: string;
+  /** 操作影响的目标对象或区域描述。 */
   targetDescription: string;
-  /** 为什么建议执行这次操作。 */
-  rationale: string;
-  /** 执行前是否必须获得用户确认。 */
-  requiresUserConfirmation: boolean;
+  /** 第一版只允许低风险操作。 */
+  riskLevel: "low";
 }
 
 /**
- * coworker 对一次用户请求或画布变化给出的介入草案。
+ * 用户对 coworker 画布操作请求给出的明确允许。
  */
-export interface DrawlessCoworkerInterventionDraft {
-  /** 草案 ID，用于确认、执行和排查问题。 */
-  draftId: string;
-  /** 草案所属的协同房间 ID。 */
+export interface DrawlessCanvasOperationPermission {
+  /** 被允许的操作请求 ID。 */
+  requestId: string;
+  /** 允许所属的协同房间 ID。 */
   roomId: DrawlessRoomId;
-  /** 草案创建时间，使用 ISO 字符串。 */
-  createdAt: string;
-  /** coworker 建议采用的介入等级。 */
-  level: DrawlessInterventionLevel;
-  /** coworker 介入结果的类型。 */
-  kind: DrawlessCoworkerInterventionKind;
-  /** 建议展示给用户的自然语言内容。 */
-  message: string;
-  /** coworker 根据上下文提出的画布操作草案列表。 */
-  operationDrafts: DrawlessCanvasOperationDraft[];
+  /** 用户允许发生在哪个聊天通道。 */
+  channel: DrawlessCoworkerChatChannel;
+  /** 给出允许的用户 session ID。 */
+  approvedBySessionId: DrawlessSessionId;
+  /** 用户允许时对应的聊天消息 ID。 */
+  approvedMessageId: string;
+  /** 用户允许时的原始文本。 */
+  approvedText: string;
+  /** 允许发生时间，使用 ISO 字符串。 */
+  approvedAt: string;
+}
+
+/**
+ * conversation chat 请求 coworker 回复时使用的输入。
+ */
+export interface DrawlessCoworkerConversationRequest {
+  /** 请求所属的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** 用户发给 coworker 的聊天消息。 */
+  userMessage: DrawlessCoworkerChatMessage;
+  /** 当前画布摘要；没有摘要时为 null。 */
+  canvasSummary: DrawlessCanvasSummary | null;
+  /** 当前画布语义图；没有语义图时为 null。 */
+  canvasSemanticGraph: DrawlessCanvasSemanticGraph | null;
+}
+
+/**
+ * coworker 对 conversation chat 请求的回复。
+ */
+export interface DrawlessCoworkerConversationResponse {
+  /** 回复所属的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** coworker 返回给用户的聊天消息。 */
+  replyMessage: DrawlessCoworkerChatMessage;
+  /** coworker 想请求的画布操作；没有操作请求时为 null。 */
+  operationRequest: DrawlessCanvasOperationRequest | null;
 }
 
 export const roomIdSchema = z
@@ -524,17 +617,18 @@ export const coworkerSessionIdSchema = sessionIdSchema.refine(
   `Coworker session id must start with ${COWORKER_SESSION_PREFIX}.`
 );
 
-export const interventionLevelSchema = z.enum([
-  "silent",
-  "suggest",
-  "propose_action"
+export const coworkerChatChannelSchema = z.enum([
+  "cursor_chat",
+  "conversation_chat"
 ]);
 
-export const coworkerInterventionKindSchema = z.enum([
+export const coworkerChatSenderSchema = z.enum(["user", "coworker"]);
+
+export const coworkerChatIntentSchema = z.enum([
   "message",
   "question",
-  "operation_draft",
-  "canvas_operation"
+  "operation_request",
+  "operation_permission"
 ]);
 
 export const canvasObservationKindSchema = z.enum([
@@ -567,7 +661,8 @@ export const coworkerRoomConfigSchema = z.object({
   roomId: roomIdSchema,
   enabled: z.boolean(),
   autoJoin: z.boolean(),
-  maxInterventionLevel: interventionLevelSchema
+  allowProactiveCursorChat: z.boolean(),
+  allowCanvasOperationRequests: z.boolean()
 }) satisfies z.ZodType<DrawlessCoworkerRoomConfig>;
 
 export const coworkerRoomSessionStatusSchema = z.enum([
@@ -736,23 +831,64 @@ export const canvasSemanticGraphSchema = z.object({
   regions: z.array(canvasSemanticRegionSchema)
 }) satisfies z.ZodType<DrawlessCanvasSemanticGraph>;
 
-export const canvasOperationDraftSchema = z.object({
-  operationType: canvasOperationTypeSchema,
-  intent: z.string().trim().min(1),
-  targetDescription: z.string().trim().min(1),
-  rationale: z.string().trim().min(1),
-  requiresUserConfirmation: z.boolean()
-}) satisfies z.ZodType<DrawlessCanvasOperationDraft>;
+export const canvasPointSchema = z.object({
+  x: z.number(),
+  y: z.number()
+}) satisfies z.ZodType<DrawlessCanvasPoint>;
 
-export const coworkerInterventionDraftSchema = z.object({
-  draftId: z.string().trim().min(1),
+export const canvasChatContextSchema = z.object({
+  currentPageId: z.string().trim().min(1).nullable(),
+  focusedRecordIds: z.array(z.string().trim().min(1)),
+  cursor: canvasPointSchema.nullable(),
+  summary: canvasSummarySchema.nullable()
+}) satisfies z.ZodType<DrawlessCanvasChatContext>;
+
+export const coworkerChatMessageSchema = z.object({
+  messageId: z.string().trim().min(1),
   roomId: roomIdSchema,
+  channel: coworkerChatChannelSchema,
+  sender: coworkerChatSenderSchema,
+  senderSessionId: sessionIdSchema,
+  intent: coworkerChatIntentSchema,
+  text: z.string().trim().min(1),
   createdAt: z.string().datetime(),
-  level: interventionLevelSchema,
-  kind: coworkerInterventionKindSchema,
-  message: z.string().trim().min(1),
-  operationDrafts: z.array(canvasOperationDraftSchema)
-}) satisfies z.ZodType<DrawlessCoworkerInterventionDraft>;
+  canvasContext: canvasChatContextSchema.nullable()
+}) satisfies z.ZodType<DrawlessCoworkerChatMessage>;
+
+export const canvasOperationRequestSchema = z.object({
+  requestId: z.string().trim().min(1),
+  roomId: roomIdSchema,
+  channel: coworkerChatChannelSchema,
+  messageId: z.string().trim().min(1),
+  createdAt: z.string().datetime(),
+  operationType: canvasOperationTypeSchema,
+  description: z.string().trim().min(1),
+  targetDescription: z.string().trim().min(1),
+  riskLevel: z.literal("low")
+}) satisfies z.ZodType<DrawlessCanvasOperationRequest>;
+
+export const canvasOperationPermissionSchema = z.object({
+  requestId: z.string().trim().min(1),
+  roomId: roomIdSchema,
+  channel: coworkerChatChannelSchema,
+  approvedBySessionId: sessionIdSchema,
+  approvedMessageId: z.string().trim().min(1),
+  approvedText: z.string().trim().min(1),
+  approvedAt: z.string().datetime()
+}) satisfies z.ZodType<DrawlessCanvasOperationPermission>;
+
+export const coworkerConversationRequestSchema = z.object({
+  roomId: roomIdSchema,
+  userMessage: coworkerChatMessageSchema,
+  canvasSummary: canvasSummarySchema.nullable(),
+  canvasSemanticGraph: canvasSemanticGraphSchema.nullable()
+}) satisfies z.ZodType<DrawlessCoworkerConversationRequest>;
+
+export const coworkerConversationResponseSchema = z.object({
+  roomId: roomIdSchema,
+  replyMessage: coworkerChatMessageSchema,
+  operationRequest: canvasOperationRequestSchema.nullable()
+}) satisfies z.ZodType<DrawlessCoworkerConversationResponse>;
 
 export function parseDrawlessRoomId(
   input: unknown

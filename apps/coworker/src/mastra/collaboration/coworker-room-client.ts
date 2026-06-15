@@ -5,7 +5,15 @@ import {
   type TLPresenceMode,
   type TLSocketStatusChangeEvent,
 } from '@tldraw/sync-core';
-import { atom, createTLStore, type TLRecord, type TLStore } from 'tldraw';
+import {
+  InstancePresenceRecordType,
+  atom,
+  createTLStore,
+  type TLInstancePresence,
+  type TLPageId,
+  type TLRecord,
+  type TLStore,
+} from 'tldraw';
 import WebSocket from 'ws';
 
 import {
@@ -34,9 +42,26 @@ export type DrawlessCoworkerRoomClientOptions = {
   onSyncError?: (reason: string) => void;
   /** 本地 TLStore 观察到远端文档变化时的回调。 */
   onRemoteChange?: (snapshot: DrawlessCoworkerRoomSnapshot) => void;
+  /** coworker 观察到用户 cursor chat 时的回调。 */
+  onCursorChat?: (event: DrawlessCoworkerCursorChatEvent) => void;
 };
 
 export type DrawlessCoworkerRoomSnapshot = DrawlessCoworkerRoomSnapshotSummary;
+
+export type DrawlessCoworkerCursorChatEvent = {
+  /** 发送 cursor chat 的协作者 userId。 */
+  userId: string;
+  /** 发送 cursor chat 的协作者名称。 */
+  userName: string;
+  /** cursor chat 文本。 */
+  message: string;
+  /** cursor chat 所在 page ID。 */
+  currentPageId: string;
+  /** cursor chat 对应的 cursor 位置。 */
+  cursor: { x: number; y: number } | null;
+  /** coworker 观察到这条消息的时间。 */
+  observedAt: string;
+};
 
 export type DrawlessCoworkerRoomClient = {
   /** coworker 的稳定协同身份。 */
@@ -49,6 +74,8 @@ export type DrawlessCoworkerRoomClient = {
   getRecords: () => TLRecord[];
   /** 获取当前 store 的轻量统计快照。 */
   getSnapshot: () => DrawlessCoworkerRoomSnapshot;
+  /** 通过 coworker presence 发送一条 cursor chat。 */
+  sendCursorChat: (message: string, cursor?: { x: number; y: number }) => void;
   /** 关闭 sync client 和 WebSocket adapter。 */
   close: () => void;
 };
@@ -73,10 +100,16 @@ export function createDrawlessCoworkerRoomClient(
     'drawless-coworker-collaboration-mode',
     'readonly'
   );
-  // 这个 PoC 只验证 coworker 能通过 sync 协议进入 room 并读取 document。
-  // presence 先保持为 null，避免在 UI 里展示一个还没有交互能力的协作者光标。
-  const presence = atom<TLRecord | null>('drawless-coworker-presence', null);
-  const presenceMode = atom<TLPresenceMode>('drawless-coworker-presence-mode', 'solo');
+  const presence = atom<TLInstancePresence | null>('drawless-coworker-presence', null);
+  const presenceMode = atom<TLPresenceMode>('drawless-coworker-presence-mode', 'full');
+  // 已经处理过的用户 cursor chat。tldraw 会把同一句 chatMessage 保留一小段时间，
+  // 如果不去重，coworker 会在这段时间内反复回复同一句话。
+  const handledCursorChats = new Set<string>();
+  // 按远端 presence id 做防抖。用户输入 cursor chat 时，chatMessage 会随着打字不断变化；
+  // 这里等输入稳定一小会儿，再把它当作一条需要回复的消息。
+  const pendingCursorChatTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // coworker 自己发出的 cursor chat 也要自动清空，否则气泡会长时间停留在画布上。
+  let clearCursorChatTimer: ReturnType<typeof setTimeout> | null = null;
 
   installNodeRuntimeAdapters();
 
@@ -88,6 +121,14 @@ export function createDrawlessCoworkerRoomClient(
       mode: collaborationMode,
     },
   });
+  // coworker 必须提供自己的 instance_presence，web 端才会把它当作真实协作者展示。
+  // chatMessage 初始为空；后续收到用户 cursor chat 后，只更新这个 presence。
+  presence.set(createCoworkerPresence({
+    identity,
+    store,
+    chatMessage: '',
+    cursor: { x: 0, y: 0 },
+  }));
   const socket = new NodeWebSocketSyncAdapter(() =>
     createSyncRoomUri({
       serverUrl: options.serverUrl,
@@ -98,7 +139,9 @@ export function createDrawlessCoworkerRoomClient(
   const client = new TLSyncClient<TLRecord, TLStore>({
     store,
     socket,
-    presence,
+    // TLSyncClient 的泛型按 TLRecord 约束；TLInstancePresence 本身也是 TLRecord。
+    // 这里保持 coworker 内部使用更具体的 TLInstancePresence，传给 sync client 时收窄为 TLRecord。
+    presence: presence as unknown as ReturnType<typeof atom<TLRecord | null>>,
     presenceMode,
     onLoad: () => {
       const snapshot = createRoomSnapshot({ roomId, sessionId, store });
@@ -125,6 +168,34 @@ export function createDrawlessCoworkerRoomClient(
     },
     { source: 'remote', scope: 'document' }
   );
+  const unlistenPresence = store.listen(
+    ({ changes }) => {
+      // 远端用户的 cursor chat 会以 instance_presence diff 的形式进入本地 TLStore。
+      // 只看 added/updated 即可；removed 表示协作者离线或 presence 被清理，不需要回复。
+      for (const record of [
+        ...Object.values(changes.added),
+        ...Object.values(changes.updated).map(([, next]) => next),
+      ]) {
+        if (!isRemotePresence(record, identity)) {
+          continue;
+        }
+
+        scheduleCursorChatReply({
+          presenceRecord: record,
+          identity,
+          localPresence: presence,
+          timers: pendingCursorChatTimers,
+          handledCursorChats,
+          onCursorChat: options.onCursorChat,
+          setClearTimer: (timer) => {
+            clearCursorChatTimer = timer;
+          },
+          getClearTimer: () => clearCursorChatTimer,
+        });
+      }
+    },
+    { source: 'remote', scope: 'presence' }
+  );
   // 先让 TLSyncClient 注册监听器，再真正打开 WebSocket，避免错过首次 online 事件。
   socket.restart();
 
@@ -134,13 +205,205 @@ export function createDrawlessCoworkerRoomClient(
     waitUntilLoaded: () => load.promise,
     getRecords: () => store.allRecords(),
     getSnapshot: () => createRoomSnapshot({ roomId, sessionId, store }),
+    sendCursorChat: (message, cursor) => {
+      // 暴露一个小的手动发送入口，后续接入 AI 或自定义 API 时可以复用同一条 presence 写入路径。
+      publishCoworkerCursorChat({
+        identity,
+        localPresence: presence,
+        message,
+        cursor,
+        getClearTimer: () => clearCursorChatTimer,
+        setClearTimer: (timer) => {
+          clearCursorChatTimer = timer;
+        },
+      });
+    },
     close: () => {
       unlistenStore();
+      unlistenPresence();
       unlistenStatus();
+      // 关闭 room client 时清掉所有 timer，避免 stop 后还有延迟回复写入已经关闭的 presence。
+      for (const timer of pendingCursorChatTimers.values()) {
+        clearTimeout(timer);
+      }
+      if (clearCursorChatTimer) {
+        clearTimeout(clearCursorChatTimer);
+      }
       client.close();
       socket.close();
     },
   };
+}
+
+function scheduleCursorChatReply(input: {
+  presenceRecord: TLInstancePresence;
+  identity: DrawlessCoworkerIdentity;
+  localPresence: ReturnType<typeof atom<TLInstancePresence | null>>;
+  timers: Map<string, ReturnType<typeof setTimeout>>;
+  handledCursorChats: Set<string>;
+  onCursorChat?: (event: DrawlessCoworkerCursorChatEvent) => void;
+  getClearTimer: () => ReturnType<typeof setTimeout> | null;
+  setClearTimer: (timer: ReturnType<typeof setTimeout> | null) => void;
+}) {
+  const message = input.presenceRecord.chatMessage.trim();
+  if (!message) {
+    // 空字符串通常表示 cursor chat 已被 tldraw 自动清空。
+    return;
+  }
+
+  const chatKey = `${input.presenceRecord.id}:${message}`;
+  if (input.handledCursorChats.has(chatKey)) {
+    // 同一个协作者、同一段文本只回复一次。
+    return;
+  }
+
+  const existingTimer = input.timers.get(input.presenceRecord.id);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  // cursor chat 会随着用户输入不断更新；稍微等一下，避免用户每敲一个字 coworker 都回复。
+  const timer = setTimeout(() => {
+    input.timers.delete(input.presenceRecord.id);
+    input.handledCursorChats.add(chatKey);
+    // 这个回调只用于日志或未来观察事件；不把 cursor chat 持久化成第二套事实源。
+    input.onCursorChat?.({
+      userId: input.presenceRecord.userId,
+      userName: input.presenceRecord.userName,
+      message,
+      currentPageId: input.presenceRecord.currentPageId,
+      cursor: input.presenceRecord.cursor
+        ? { x: input.presenceRecord.cursor.x, y: input.presenceRecord.cursor.y }
+        : null,
+      observedAt: new Date().toISOString(),
+    });
+    publishCoworkerCursorChat({
+      identity: input.identity,
+      localPresence: input.localPresence,
+      message: '收到，我在看这里。',
+      cursor: input.presenceRecord.cursor
+        ? { x: input.presenceRecord.cursor.x + 24, y: input.presenceRecord.cursor.y + 24 }
+        : undefined,
+      getClearTimer: input.getClearTimer,
+      setClearTimer: input.setClearTimer,
+    });
+  }, 500);
+
+  input.timers.set(input.presenceRecord.id, timer);
+}
+
+function publishCoworkerCursorChat(input: {
+  identity: DrawlessCoworkerIdentity;
+  localPresence: ReturnType<typeof atom<TLInstancePresence | null>>;
+  message: string;
+  cursor?: { x: number; y: number };
+  getClearTimer: () => ReturnType<typeof setTimeout> | null;
+  setClearTimer: (timer: ReturnType<typeof setTimeout> | null) => void;
+}) {
+  const currentPresence = input.localPresence.get();
+  if (!currentPresence) {
+    return;
+  }
+
+  const chatMessage = input.message.trim().slice(0, 64);
+  if (!chatMessage) {
+    return;
+  }
+
+  const clearTimer = input.getClearTimer();
+  if (clearTimer) {
+    // 如果 coworker 连续发出两条 cursor chat，上一条的清空 timer 不应该把新消息提前清掉。
+    clearTimeout(clearTimer);
+  }
+
+  // 更新 presence signal 后，TLSyncClient 会把 presence diff 推送给 sync room。
+  // 这里没有写 tldraw document，所以不会改动画布事实源。
+  input.localPresence.set({
+    ...currentPresence,
+    cursor: input.cursor
+      ? { x: input.cursor.x, y: input.cursor.y, type: 'default', rotation: 0 }
+      : currentPresence.cursor,
+    chatMessage,
+    lastActivityTimestamp: Date.now(),
+  });
+
+  // tldraw cursor chat 是临时现场消息；PoC 里按官方行为附近的节奏自动清空。
+  input.setClearTimer(
+    setTimeout(() => {
+      const latestPresence = input.localPresence.get();
+      if (!latestPresence || latestPresence.userId !== input.identity.sessionId) {
+        return;
+      }
+      input.localPresence.set({
+        ...latestPresence,
+        chatMessage: '',
+        lastActivityTimestamp: Date.now(),
+      });
+      input.setClearTimer(null);
+    }, 2_000)
+  );
+}
+
+function createCoworkerPresence(input: {
+  identity: DrawlessCoworkerIdentity;
+  store: TLStore;
+  chatMessage: string;
+  cursor: { x: number; y: number };
+}): TLInstancePresence {
+  // InstancePresenceRecordType 会补齐 tldraw presence 的默认字段，并做运行时结构校验。
+  return InstancePresenceRecordType.create({
+    id: InstancePresenceRecordType.createId(input.identity.sessionId),
+    userId: input.identity.sessionId,
+    userName: input.identity.displayName,
+    color: input.identity.color,
+    currentPageId: findCurrentPageId(input.store),
+    cursor: {
+      x: input.cursor.x,
+      y: input.cursor.y,
+      type: 'default',
+      rotation: 0,
+    },
+    chatMessage: input.chatMessage.slice(0, 64),
+    meta: {
+      role: 'coworker',
+      roomId: input.identity.roomId,
+      instanceId: input.identity.instanceId,
+    },
+  });
+}
+
+function isRemotePresence(
+  record: TLRecord,
+  identity: DrawlessCoworkerIdentity
+): record is TLInstancePresence {
+  // 只处理其他协作者的 instance_presence，避免 coworker 看到自己发出的 chat 后自问自答。
+  return (
+    record.typeName === 'instance_presence' &&
+    'userId' in record &&
+    record.userId !== identity.sessionId &&
+    'chatMessage' in record
+  );
+}
+
+function findCurrentPageId(store: TLStore): TLPageId {
+  // TLInstancePresence 必须带 currentPageId。Node 侧没有 Editor 实例，
+  // 所以从 store records 中尽量推断当前 page。
+  const instanceRecord = store.allRecords().find((record) => record.id === 'instance:instance');
+  if (
+    instanceRecord &&
+    'currentPageId' in instanceRecord &&
+    typeof instanceRecord.currentPageId === 'string'
+  ) {
+    return instanceRecord.currentPageId as TLPageId;
+  }
+
+  const pageRecord = store.allRecords().find((record) => record.typeName === 'page');
+  if (pageRecord) {
+    return pageRecord.id as TLPageId;
+  }
+
+  // createTLStore 默认会有 page:page；这里作为兜底，避免极端空 store 下无法创建 presence。
+  return 'page:page' as TLPageId;
 }
 
 // sync-core 公开了 TLPersistentClientSocket 接口，但没有公开浏览器版 ClientWebSocketAdapter。

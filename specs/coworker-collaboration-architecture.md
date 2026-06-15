@@ -13,11 +13,13 @@ drawless 当前已经有一个清晰的协同基础：
 
 用户和 coworker 的关系应该是：
 
+- canvas 是共同工作区。
 - 用户在浏览器中进入某个 tldraw room。
 - coworker 以一个特殊协作者身份进入同一个 room。
-- coworker 通过画布数据理解项目上下文。
-- coworker 可以给建议、提供灵感、提出操作草案。
-- 在满足权限和确认条件后，coworker 可以通过协同边界提交画布修改。
+- 用户和 coworker 像两个同事一样共同在 canvas 中工作。
+- 用户和 coworker 可以通过 cursor chat 或 conversation chat 交流。
+- coworker 可以回复用户，也可以在观察画布后主动通过 cursor chat 交流。
+- coworker 可以操作画布，但必须先获得用户明确允许。
 
 核心原则：**tldraw document 始终是唯一画布事实源**。
 
@@ -37,6 +39,57 @@ drawless 当前已经有一个清晰的协同基础：
 4. coworker 的决策层判断何时介入、说什么、是否提出画布操作。
 5. coworker 的行动层只通过协同边界写回 tldraw document。
 
+产品判断：
+
+- coworker 的核心亮点不应该只是“白板旁边有一个 AI 聊天框”，而是“AI 作为同事出现在同一个白板现场”。
+- tldraw 的 cursor chat 很适合作为 coworker 的第一层表达能力，因为它把短消息绑定在协作者 cursor 附近，比侧边栏聊天更像现场协作。
+- conversation chat 仍然需要保留，它适合承载传统 agent 对话、长内容解释和更完整的确认流程。
+- cursor chat 和 conversation chat 都是聊天通道，不是两套不同的 AI 能力。
+- 这个方向有明显差异化：用户不是把画布截图发给 AI，而是在同一个 room 里和一个能观察、回应、指向、协助操作的 AI 同事协作。
+
+## 2.1 简化需求模型
+
+当前阶段先按一个简单模型理解，不把 AI 介入设计复杂化。
+
+```mermaid
+flowchart TB
+  Canvas["canvas<br/>共同工作区"]
+  User["用户<br/>协作者"]
+  Coworker["coworker<br/>AI 同事"]
+  CursorChat["cursor chat<br/>画布现场聊天"]
+  ConversationChat["conversation chat<br/>传统 agent 聊天"]
+
+  User <--> Canvas
+  Coworker <--> Canvas
+  User <--> CursorChat
+  Coworker <--> CursorChat
+  User <--> ConversationChat
+  Coworker <--> ConversationChat
+```
+
+三个对象：
+
+- `canvas`：共同工作区，也是画布事实源。
+- `用户`：人类协作者。
+- `coworker`：AI 协作者。
+
+两个聊天通道：
+
+- `cursor chat`：画布现场聊天，适合短句、指向当前位置、轻量讨论和即时确认。
+- `conversation chat`：传统聊天 agent 通道，适合长内容、持续对话、复杂解释和完整确认。
+
+coworker 的能力先简化为三类：
+
+- `回复用户`：用户在 cursor chat 或 conversation chat 中说话，coworker 结合画布上下文回复。
+- `主动交流`：coworker 观察画布后，如果判断有必要介入，可以主动通过 cursor chat 和用户交流。
+- `操作画布`：coworker 可以操作 canvas，但必须先通过聊天通道获得用户明确允许。
+
+画布操作的允许规则：
+
+1. 在 `conversation chat` 中，如果 coworker 想操作画布，必须先主动提问；用户明确允许后，coworker 才能执行。
+2. 在 `cursor chat` 中，如果 coworker 发现需要操作画布，必须先用 cursor chat 提问；只有收到用户通过 cursor chat 给出的明确允许后，coworker 才能执行。
+3. 没有用户允许时，coworker 只能观察、回复、建议，不能写画布。
+
 ## 3. 总体架构
 
 ```mermaid
@@ -47,21 +100,23 @@ flowchart LR
 
   User -->|"画布操作"| Room
   Coworker -->|"观察画布数据"| Room
-  Coworker -->|"建议、草案、经确认后的操作"| Room
+  Coworker -->|"聊天、操作请求、经允许后的操作"| Room
 ```
 
 这张图里，coworker 和用户是并列的协作者。它不是藏在 server 里面的逻辑，也不是 web 页面里的装饰组件。
 
-更细一点可以拆成五层：
+更细一点可以拆成几层：
 
 ```mermaid
 flowchart TB
   A["tldraw document<br/>唯一事实源"] --> B["协同同步层<br/>TLSocketRoom / useSync"]
   B --> C["观察层<br/>快照、增量、presence、选区"]
   C --> D["理解层<br/>结构、关系、意图、最近变化"]
-  D --> E["决策层<br/>是否介入、介入方式、风险判断"]
-  E --> F["行动层<br/>回复、评论、操作草案、画布写入"]
-  F --> B
+  D --> E["聊天层<br/>cursor chat / conversation chat"]
+  D --> F["许可层<br/>是否获得用户明确允许"]
+  F --> G["行动层<br/>允许后画布写入"]
+  E --> B
+  G --> B
 ```
 
 ## 4. 职责边界
@@ -74,7 +129,7 @@ web 继续只负责用户的画布体验：
 - 生成浏览器设备身份和标签页 session。
 - 使用 `useSync` 连接后端 WebSocket room。
 - 挂载 `<Tldraw />`。
-- 后续可以展示 coworker 的在线状态、建议入口、确认弹层或评论，但不在当前阶段做 UI 优化。
+- 后续可以展示 coworker 的在线状态、聊天入口、操作允许入口或评论，但不在当前阶段做 UI 优化。
 
 web 不应该：
 
@@ -116,7 +171,8 @@ shared 是本方案最重要的契约层。后续新增跨端类型时，要放�
 - room 级 coworker 配置。
 - 画布观察事件 schema。
 - 画布语义摘要 schema。
-- coworker 介入草案 schema。
+- coworker 聊天消息 schema。
+- coworker 画布操作允许 schema。
 - coworker 画布操作请求 schema。
 - coworker 操作结果 schema。
 
@@ -129,14 +185,14 @@ coworker 是 AI 同事运行时：
 - 订阅画布变化、presence、选区等观察数据。
 - 生成画布摘要和用户操作摘要。
 - 调用 Mastra agent 做建议、灵感和行动判断。
-- 输出自然语言建议或画布操作草案。
+- 输出聊天回复、操作请求或可执行的低风险画布操作。
 - 在明确允许后，通过协同边界提交画布操作。
 
 coworker 不应该：
 
 - 自己发明一套和 tldraw document 平级的画布模型。
 - 把 LLM 生成结果直接当成画布事实。
-- 在没有用户确认和权限策略时直接大规模改画布。
+- 在没有用户明确允许和权限策略时直接大规模改画布。
 
 ### 4.5 coworker 控制面 API
 
@@ -398,58 +454,87 @@ flowchart LR
 }
 ```
 
-## 8. Coworker 介入模型
+## 8. Coworker 聊天和行动模型
 
-coworker 不应该看到任何变化就立即说话。真正像同事的 AI，需要判断“何时介入”。
+当前阶段先把 AI 介入收敛成一个简单产品模型：coworker 和用户共同在 canvas 里工作，二者通过聊天通道沟通，coworker 只有在用户允许后才操作画布。
 
-### 8.1 介入等级
+### 8.1 两个聊天通道
 
-建议定义三种介入等级：
-
-```ts
-export type DrawlessInterventionLevel =
-  | "silent"
-  | "suggest"
-  | "propose_action";
+```mermaid
+flowchart LR
+  User["用户"] <--> CursorChat["cursor chat<br/>画布现场短聊天"]
+  Coworker["coworker"] <--> CursorChat
+  User <--> ConversationChat["conversation chat<br/>传统 agent 聊天"]
+  Coworker <--> ConversationChat
+  User <--> Canvas["canvas<br/>共同工作区"]
+  Coworker <--> Canvas
 ```
 
-- `silent`：只观察，不打扰。
-- `suggest`：给一句建议、问题或灵感。
-- `propose_action`：提出可确认的画布操作草案。
+`cursor chat`：
 
-### 8.2 介入触发条件
+- 发生在画布现场，和 cursor、位置、选区、正在看的区域天然相关。
+- 适合短句、即时反馈、轻量讨论、现场提问和现场确认。
+- 用户可以通过 cursor chat 和 coworker 说话。
+- coworker 可以通过 cursor chat 回复用户。
+- coworker 也可以在观察画布后，认为有必要时主动通过 cursor chat 跟用户交流。
 
-第一版可以只支持显式触发：
+`conversation chat`：
 
-- 用户在聊天或命令入口里问 coworker。
-- 用户点击“让 coworker 看看”。
-- 用户选中一块区域后请求建议。
+- 是传统 agent 聊天通道。
+- 适合长内容、连续上下文、复杂解释、结构化建议和完整的操作确认。
+- 用户可以在这里要求 coworker 理解、总结、提出方案或请求操作画布。
+- coworker 如果想在这个通道里操作画布，必须先提问并获得用户明确允许。
 
-第二版再考虑半自动触发：
+### 8.2 Coworker 能力
 
-- 用户停顿超过一定时间。
-- 用户反复修改同一块区域。
-- 用户新增了明显的问题文本。
-- 用户把多个孤立节点放在一起但没有组织结构。
+coworker 先只定义三类能力：
 
-自动触发要非常克制，避免打扰。
+1. `回复用户`
+   用户在 cursor chat 或 conversation chat 中发消息，coworker 结合画布上下文回复。
 
-### 8.3 介入结果
+2. `主动交流`
+   coworker 观察 canvas 后，如果判断有必要介入，可以主动通过 cursor chat 发起交流。主动交流只用于提醒、追问、建议，不直接操作画布。
 
-介入结果分四类：
+3. `操作画布`
+   coworker 可以创建、修改或整理 canvas 内容，但必须先获得用户明确允许。没有允许时，coworker 只能观察和聊天。
 
-```ts
-export type DrawlessCoworkerInterventionKind =
-  | "message"
-  | "question"
-  | "operation_draft"
-  | "canvas_operation";
+### 8.3 画布操作许可规则
+
+画布操作必须遵守“先问，再等用户允许，再执行”。
+
+```mermaid
+flowchart TB
+  NeedAction["coworker 判断可能需要操作画布"] --> Channel{"当前沟通通道"}
+  Channel --> Conversation["conversation chat"]
+  Channel --> Cursor["cursor chat"]
+  Conversation --> AskConversation["coworker 在 conversation chat 中提问"]
+  Cursor --> AskCursor["coworker 在 cursor chat 中提问"]
+  AskConversation --> UserAllowConversation{"用户明确允许？"}
+  AskCursor --> UserAllowCursor{"用户用 cursor chat 明确允许？"}
+  UserAllowConversation -->|"是"| WriteCanvas["coworker 操作 canvas"]
+  UserAllowCursor -->|"是"| WriteCanvas
+  UserAllowConversation -->|"否"| OnlyChat["只聊天，不写画布"]
+  UserAllowCursor -->|"否"| OnlyChat
 ```
 
-- `message`：普通建议。
-- `question`：追问用户意图。
-- `operation_draft`：操作草案，不执行。
-- `canvas_operation`：真实画布操作，必须满足权限和确认条件。
+具体规则：
+
+1. conversation chat 中，如果 coworker 想操作画布，必须先主动提问；用户明确允许后，coworker 才能操作 canvas。
+2. cursor chat 中，如果 coworker 发现需要操作画布，必须先通过 cursor chat 提问；只有收到用户通过 cursor chat 给出的明确允许后，coworker 才能操作 canvas。
+3. coworker 主动通过 cursor chat 介入时，只能先聊天、建议、追问，不能直接写画布。
+4. 用户没有明确允许时，coworker 不能把建议自动变成画布修改。
+5. 真实画布修改仍然必须通过 tldraw 协同边界写入，不能绕过 sync room。
+
+### 8.4 后续 shared 契约方向
+
+后续契约不需要一开始设计得很复杂，可以先表达四件事：
+
+- `channel`：这次沟通来自 `cursor_chat` 还是 `conversation_chat`。
+- `message`：用户或 coworker 说了什么。
+- `canvasContext`：这句话发生时的画布上下文，例如 room、选区、cursor 位置和最近变化。
+- `permission`：用户是否明确允许 coworker 操作画布。
+
+这样就能覆盖当前需求：聊天、回复、主动 cursor chat、以及用户允许后的画布操作。
 
 ## 9. 画布行动模型
 
@@ -463,40 +548,52 @@ sequenceDiagram
   participant S as server
   participant R as tldraw room
 
-  U->>W: 选中区域并请求整理
-  W->>C: 发送 roomId、选区、用户意图
-  C->>C: 读取画布镜像并生成操作草案
-  C->>W: 返回操作草案
-  W->>U: 展示确认
-  U->>W: 确认执行
-  W->>C: 授权执行
+  C->>W: 通过聊天通道请求操作画布
+  W->>U: 展示 coworker 的操作请求
+  U->>W: 在同一聊天通道中明确允许
+  W->>C: 发送允许结果
   C->>S: 作为协作者提交 tldraw changes
   S->>R: 写入 tldraw document
   R-->>W: 用户实时看到变化
 ```
 
-### 9.1 操作草案
+### 9.1 操作请求
 
-操作草案是 coworker 计划做什么，但还没有改画布。
+操作请求是 coworker 想操作画布之前必须先说清楚的内容。它不是画布修改本身，也不能直接执行。
 
 ```ts
-export interface DrawlessCanvasOperationDraft {
-  /** 草案 ID，用于用户确认和后续执行追踪。 */
-  draftId: string;
-  /** 草案所属房间 ID。 */
+export interface DrawlessCanvasOperationRequest {
+  /** 请求 ID，用于用户允许和后续执行追踪。 */
+  requestId: string;
+  /** 请求所属房间 ID。 */
   roomId: DrawlessRoomId;
-  /** 草案创建时间，使用 ISO 字符串。 */
+  /** 请求创建时间，使用 ISO 字符串。 */
   createdAt: string;
-  /** 这次操作想帮助用户完成的目标。 */
-  intent: string;
-  /** 操作影响的目标对象描述。 */
+  /** 请求来自哪个聊天通道。 */
+  channel: "cursor_chat" | "conversation_chat";
+  /** coworker 想做什么，用人类可读文本表达。 */
+  description: string;
+  /** 操作影响的画布对象或区域描述。 */
   targetDescription: string;
-  /** 操作风险等级。 */
-  riskLevel: "low" | "medium" | "high";
-  /** 是否需要用户确认。 */
-  requiresUserConfirmation: boolean;
-  /** 计划执行的结构化操作列表。 */
-  operations: DrawlessCanvasOperation[];
+  /** 第一版只允许 low。 */
+  riskLevel: "low";
+}
+```
+
+用户允许也需要结构化记录：
+
+```ts
+export interface DrawlessCanvasOperationPermission {
+  /** 被允许的操作请求 ID。 */
+  requestId: string;
+  /** 允许操作的用户 session ID。 */
+  approvedBySessionId: DrawlessSessionId;
+  /** 用户允许发生在哪个聊天通道。 */
+  channel: "cursor_chat" | "conversation_chat";
+  /** 用户允许时的原始消息。 */
+  approvedMessage: string;
+  /** 允许时间，使用 ISO 字符串。 */
+  approvedAt: string;
 }
 ```
 
@@ -609,28 +706,29 @@ server 只补充最小控制能力：
 目标：
 
 - 明确 coworker 是协作者，不是 server 内部插件。
-- 在 `packages/shared` 增加最小 coworker 类型草案。
+- 在 `packages/shared` 增加最小 coworker 类型。
 - 暂不接入真实 AI 操作。
 
 交付：
 
 - 本技术方案。
-- shared 类型：identity、observation、intervention draft。
+- shared 类型：identity、observation、chat message、operation permission。
 - 对应 schema 和测试。
 
-### Phase 1：显式触发的只读 coworker
+### Phase 1：conversation chat 只读回复
 
 目标：
 
-- 用户显式请求 coworker 看当前 room。
+- 用户通过 conversation chat 请求 coworker 看当前 room。
 - coworker 能接收一个由 web 或 server 提供的画布摘要。
-- coworker 只回复建议，不操作画布。
+- coworker 能在 conversation chat 中回复用户。
+- 这个阶段 coworker 不操作画布。
 
 可能实现：
 
 - web 从 tldraw editor/store 读取当前选区和简化 records。
-- web 调用 coworker API。
-- coworker 返回 message 或 operation_draft。
+- web 调用 server conversation API，由 server 转发到 coworker API。
+- coworker 返回一段只读回复。
 
 这个阶段不要求 coworker 真正常驻 room，但契约要按常驻 room 设计。
 
@@ -642,6 +740,7 @@ server 只补充最小控制能力：
 - coworker 能维护当前画布镜像。
 - coworker 能感知快照和增量变化。
 - coworker 默认静默，只记录最近变化摘要。
+- coworker 能以协作者身份维护 presence，为后续 cursor chat 做准备。
 
 交付：
 
@@ -649,27 +748,47 @@ server 只补充最小控制能力：
 - canvas mirror。
 - observation event buffer。
 - room lifecycle 管理。
+- coworker presence 基础能力。
 
-### Phase 3：可确认的操作草案
+### Phase 2.5：cursor chat 双向交流
 
 目标：
 
-- 用户请求 coworker 整理、补充、解释画布。
-- coworker 生成结构化操作草案。
-- web 展示草案并要求确认。
-- 仍不自动执行高风险操作。
+- 用户可以通过 cursor chat 向 coworker 发消息。
+- coworker 能观察用户 cursor chat，并结合画布上下文回复。
+- coworker 也可以在观察画布后，判断有必要时主动通过 cursor chat 跟用户交流。
+- cursor chat 只用于聊天、建议、追问和操作前询问，不直接写画布。
 
 交付：
 
-- operation draft schema。
-- draft preview。
-- confirmation flow。
+- 用户 cursor chat observation event。
+- coworker cursor chat reply flow。
+- coworker 主动 cursor chat flow。
+- cursor chat 消息长度和频率限制。
+- coworker cursor/presence 的稳定身份。
+- cooldown 和去重策略，避免连续打扰。
+
+### Phase 3：画布操作许可链路
+
+目标：
+
+- coworker 在 conversation chat 或 cursor chat 中提出操作画布的请求。
+- 用户在同一个聊天通道里明确允许后，系统记录这次允许。
+- 没有用户允许时，coworker 只能聊天和建议。
+- 这个阶段只建立允许关系，不一定真正写画布。
+
+交付：
+
+- 操作请求和用户允许 schema。
+- conversation chat 许可 flow。
+- cursor chat 许可 flow。
+- 许可过期和撤销规则。
 
 ### Phase 4：低风险画布写入
 
 目标：
 
-- coworker 经确认后创建新文本、注释、箭头等低风险内容。
+- coworker 获得用户允许后，创建新文本、注释、箭头等低风险内容。
 - 操作通过 tldraw sync 写回 room。
 - 用户实时看到改动。
 
@@ -680,16 +799,17 @@ server 只补充最小控制能力：
 - 错误处理。
 - 最小审计日志。
 
-### Phase 5：半自动介入
+### Phase 5：主动 cursor chat 交流策略
 
 目标：
 
-- coworker 能在低打扰策略下主动提出建议。
+- coworker 能在低打扰策略下主动通过 cursor chat 交流。
 - 例如用户停顿、重复修改、选中区域后无动作。
+- 主动交流只用于聊天、建议和追问；如果需要操作画布，仍然必须先询问并获得用户允许。
 
 交付：
 
-- intervention policy。
+- 主动交流策略。
 - cooldown。
 - 用户关闭/暂停 coworker 的控制。
 
@@ -829,7 +949,7 @@ sequenceDiagram
 - 第一版只允许新增内容，不做删除。
 - 第一版只允许新增独立文本、注释区、低风险 arrow。
 - 修改用户已有文本、大规模移动、删除、跨 page 批处理全部视为高风险，必须推迟。
-- 每次执行前必须有 operation draft 和用户确认。
+- 每次执行前必须有操作请求和用户明确允许。
 - 所有 coworker 创建的内容要通过 metadata 或命名约定标记来源，便于后续撤销和筛选。
 
 仍需验证：
@@ -842,7 +962,7 @@ sequenceDiagram
 
 - **coworker 作为客户端写回是主路线。**
 - **server `room.updateStore` 只能作为维护工具或后门管理能力，不作为产品化 AI 操作路径。**
-- **Phase 4 之前必须先完成操作草案、确认、低风险 operation schema。**
+- **Phase 4 之前必须先完成操作请求、用户允许、低风险 operation schema。**
 
 ### 12.4 server 需要改多少
 
@@ -875,22 +995,43 @@ sequenceDiagram
 
 ## 13. 数据流示例
 
-### 13.1 用户请求建议
+### 13.1 用户通过 conversation chat 请求 coworker
 
 ```mermaid
 sequenceDiagram
   participant U as 用户
   participant W as web
+  participant S as server
   participant C as coworker
 
-  U->>W: 选中一组 shape，点击“给点建议”
+  U->>W: 在 conversation chat 中提问
   W->>W: 从 editor/store 提取选区摘要
-  W->>C: POST /rooms/:roomId/interventions
+  W->>S: POST /rooms/:roomId/coworker/conversation
+  S->>C: 转发到 coworker conversation API
   C->>C: 生成上下文摘要
   C->>C: 调用 Mastra agent
-  C-->>W: 返回建议和可选操作草案
-  W-->>U: 展示建议
+  C-->>S: 返回聊天回复
+  S-->>W: 返回聊天回复
+  W-->>U: 在 conversation chat 中展示
 ```
+
+### 13.1.1 用户和 coworker 通过 cursor chat 交流
+
+```mermaid
+sequenceDiagram
+  participant W as 用户 web
+  participant S as server
+  participant C as coworker
+  participant R as tldraw room
+
+  W->>R: 用户发送 cursor chat
+  R-->>C: coworker 观察到用户 cursor chat 和画布上下文
+  C->>C: 判断是否回复
+  C->>R: coworker 发送 cursor chat 回复
+  R-->>W: 用户在画布现场看到回复
+```
+
+cursor chat 也支持 coworker 主动发起。coworker 观察画布后，如果判断有必要介入，可以先发一句短消息或问题；如果涉及画布操作，必须先等用户在 cursor chat 中明确允许。
 
 ### 13.2 coworker 常驻观察
 
@@ -908,7 +1049,7 @@ sequenceDiagram
   C->>C: 更新 observation buffer
 ```
 
-### 13.3 确认后执行画布操作
+### 13.3 获得允许后执行画布操作
 
 ```mermaid
 sequenceDiagram
@@ -917,10 +1058,10 @@ sequenceDiagram
   participant C as coworker
   participant R as tldraw room
 
-  C-->>W: operation_draft
-  W-->>U: 展示草案
-  U->>W: 确认执行
-  W->>C: execute draft
+  C-->>W: 在聊天通道中请求操作画布
+  W-->>U: 展示请求
+  U->>W: 在同一聊天通道中明确允许
+  W->>C: 发送允许结果
   C->>R: 通过协同连接提交 changes
   R-->>W: 同步变化
   W-->>U: 画布更新
@@ -941,7 +1082,7 @@ sequenceDiagram
 - room 级开关。
 - 用户级权限。
 - coworker session 鉴权。
-- 操作确认策略。
+- 操作允许策略。
 
 ### 14.2 隐私
 
@@ -975,16 +1116,16 @@ MVP 只做 low。
 packages/shared/src/
   coworker.ts
   canvas-observation.ts
-  canvas-intervention.ts
+  canvas-operation-permission.ts
 
 apps/coworker/src/mastra/
   agents/drawless-coworker.ts
-  tools/canvas-intervention-tool.ts
+  tools/canvas-conversation-tool.ts
   runtime/room-connector.ts
   runtime/canvas-mirror.ts
   runtime/observation-buffer.ts
   runtime/action-executor.ts
-  runtime/intervention-policy.ts
+  runtime/proactive-chat-policy.ts
 
 apps/server/src/
   coworker/coworker-config.ts
@@ -1003,7 +1144,8 @@ apps/web/src/
 
 - schema 能验证合法 roomId/sessionId。
 - observation event schema 能拒绝缺少必要字段的数据。
-- operation draft schema 能表达低风险操作。
+- operation permission schema 能表达用户是否允许 coworker 操作画布。
+- canvas operation schema 能表达低风险操作。
 - 每个 shared 类型属性保留中文注释。
 
 ### 16.2 server
@@ -1018,15 +1160,15 @@ apps/web/src/
 - 没有画布上下文时不编造内容。
 - 接收到快照后能生成摘要。
 - 接收到最近事件后能更新 observation buffer。
-- 操作草案默认需要用户确认。
+- 没有用户允许时不会操作画布。
 - 没有执行权限时不会写画布。
 
 ### 16.4 web
 
 - 选区摘要生成稳定。
-- coworker 返回 message 时能展示。
-- coworker 返回 operation draft 时能等待确认。
-- 取消确认不会改动画布。
+- coworker 在 conversation chat 中返回消息时能展示。
+- coworker 请求操作画布时能等待用户允许。
+- 用户未允许时不会改动画布。
 
 ## 17. 已判定事项和开放问题
 
@@ -1037,34 +1179,48 @@ apps/web/src/
 3. server 不解析原始 WebSocket 包给 LLM。
 4. 画布摘要从 `TLStore` snapshot 和 `store.listen` 的 changes 派生。
 5. coworker 写回画布时通过自己的 `TLStore.put/remove` 触发 sync，不直接改 server storage。
-6. MVP 先做显式触发的只读建议，再做常驻观察。
+6. MVP 先做 conversation chat 只读回复，再做常驻观察。
 7. coworker 需要 Mastra custom API routes 作为 room 生命周期控制面。
 8. web 不直接通知 coworker；由 server 判断 room 生命周期和权限后再调用 coworker 控制面。
 9. server 侧 coworker control 默认关闭，只在显式配置后代理 start/status/stop 请求。
 10. 端到端联调使用显式 smoke 命令，不纳入默认 `pnpm check`。
 11. web 侧当前只提供显式生命周期按钮，不自动唤醒 coworker，也不触发 AI 推理。
+12. cursor chat 是 coworker 的核心现场对话通道，用户和 coworker 都可以通过它交流。
+13. conversation chat 是传统 agent 对话通道，适合长内容、复杂解释和完整确认。
+14. cursor chat 和 conversation chat 都是聊天通道，不是两套不同的 AI 能力。
+15. coworker 可以回复用户，也可以在观察画布后主动通过 cursor chat 交流。
+16. coworker 只有在用户明确允许后才能操作画布。
+17. 如果操作请求发生在 conversation chat，用户必须在 conversation chat 中允许。
+18. 如果操作请求发生在 cursor chat，用户必须通过 cursor chat 允许。
 
 ### 17.2 仍需产品决策
 
 1. coworker 是否默认进入每个 room，还是用户显式唤醒后才进入？
 2. coworker 的 presence 应该如何在 tldraw UI 中展示？
-3. 操作草案确认 UI 放在哪里，如何不破坏当前“逻辑验证壳层”的 UI 约束？
+3. 画布操作允许 UI 放在哪里，如何不破坏当前“逻辑验证壳层”的 UI 约束？
 4. coworker memory 是 room 级、用户级还是 session 级？
 5. 如果多个用户同时在 room 中，coworker 应该响应谁的意图？
 6. coworker 创建的内容如何标记来源，以便用户筛选、撤销或隐藏？
 7. 哪些低风险操作可以第一批开放给 coworker 执行？
+8. cursor chat 的主动发言频率、冷却时间和静音策略如何设置？
+9. cursor chat 消息应该绑定 coworker cursor、用户当前选区，还是最近变化区域？
+10. cursor chat 消失后是否需要在可选历史里保留一份普通文本记录？
+11. 用户发给 coworker 的 cursor chat 是否需要显式 @coworker，还是 room 内所有 cursor chat 都进入 coworker observation？
+12. 用户允许操作画布的表达是否需要固定格式，例如“可以”“确认”“帮我做”？
 
 ## 18. 推荐下一步
 
-建议下一步不要直接做完整自动操作，而是先做 Phase 0 和 Phase 1，同时用一个小 PoC 验证 Phase 2 的 `TLSyncClient` 常驻连接。
+建议下一步不要直接做完整自动操作，而是先做 conversation chat 的只读回复，同时用一个小 PoC 验证 Phase 2 的 `TLSyncClient` 常驻连接。
 
 具体顺序：
 
-1. 在 `packages/shared` 增加 coworker identity、observation、intervention draft 的类型和 Zod schema。
-2. 在 `apps/web` 增加一个只读的当前选区摘要函数，不改 UI。
-3. 在 `apps/coworker` 增加一个 HTTP 或 Mastra tool 入口，接收 roomId、用户意图、选区摘要。
-4. 让 coworker 返回建议和操作草案，但不执行画布修改。
+1. 在 `packages/shared` 增加 conversation message、cursor chat message、canvas operation permission 的类型和 Zod schema。
+2. 在 `apps/web` 增加一个只读的当前选区摘要函数，不改复杂 UI。
+3. 在 `apps/coworker` 增加 conversation API，接收 roomId、用户消息、画布摘要。
+4. 让 coworker 先在 conversation chat 中返回只读回复，不执行画布修改。
 5. 在 `apps/coworker` 做一个独立 PoC：用 `ClientWebSocketAdapter + TLSyncClient + createTLStore` 连接本地 `/sync/:roomId`，同步完成后输出 snapshot 摘要。
 6. PoC 通过后，再把常驻 room connector 纳入 Phase 2。
+7. 常驻连接稳定后，验证用户 cursor chat observation 和 coworker cursor chat reply。
+8. 最后再做“用户明确允许后”的低风险画布操作。
 
 这样能快速验证产品感觉，同时不会破坏当前最重要的协同链路。
