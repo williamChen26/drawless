@@ -1,5 +1,10 @@
 import {
+  canvasContextRequestSchema,
+  coworkerConversationStreamRequestSchema,
   parseDrawlessRoomId,
+  type DrawlessCanvasContextRequest,
+  type DrawlessCanvasContextSnapshot,
+  type DrawlessCoworkerConversationStreamRequest,
   type DrawlessCoworkerRoomSessionStatus,
   type DrawlessCoworkerRoomSnapshotSummary,
   type DrawlessCoworkerRoomStatusResponse,
@@ -11,6 +16,14 @@ import {
   createDrawlessCoworkerRoomClient,
   type DrawlessCoworkerRoomClient,
 } from './coworker-room-client';
+import {
+  replyToCursorChat,
+  type DrawlessCursorChatReplyAgent,
+} from './cursor-chat-reply-handler';
+import {
+  createCanvasContextSnapshot,
+  createUnavailableCanvasContextSnapshot,
+} from '../tools/canvas-context-reader';
 
 type CoworkerRoomEntry = {
   /** 当前 room 对应的 coworker sync client。 */
@@ -21,6 +34,8 @@ type CoworkerRoomEntry = {
   snapshot: DrawlessCoworkerRoomSnapshotSummary | null;
   /** 最近一次启动或同步错误。 */
   lastError: string | null;
+  /** 最近从远端 document 变化中观察到的 record ID。 */
+  recentlyChangedRecordIds: string[];
   /** 当前 room client 的启动时间。 */
   startedAt: string;
   /** 当前 room client 最近一次状态更新时间。 */
@@ -35,6 +50,8 @@ type CoworkerRoomEntry = {
 export class DrawlessCoworkerRoomRegistry {
   // key 使用 roomId，保证每个 room 在当前 coworker 进程中最多只有一个常驻 client。
   private readonly entries = new Map<DrawlessRoomId, CoworkerRoomEntry>();
+
+  constructor(private readonly cursorChatReplyAgent: DrawlessCursorChatReplyAgent) {}
 
   async start(
     roomIdInput: string,
@@ -65,18 +82,29 @@ export class DrawlessCoworkerRoomRegistry {
         entry.lastError = null;
         entry.updatedAt = new Date().toISOString();
       },
-      onRemoteChange: (snapshot) => {
+      onRemoteChange: (snapshot, changedRecordIds) => {
         // 这里只保存轻量统计，不复制完整 tldraw document，避免制造第二套事实源。
         entry.status = entry.status === 'error' ? entry.status : 'online';
         entry.snapshot = snapshot;
+        entry.recentlyChangedRecordIds = mergeRecentRecordIds(
+          changedRecordIds,
+          entry.recentlyChangedRecordIds
+        );
         entry.updatedAt = new Date().toISOString();
       },
       onCursorChat: (event) => {
-        // PoC 阶段只打日志和刷新生命周期时间；不把 cursor chat 保存成第二套对话事实源。
+        // cursor chat 不落库，不变成第二套对话事实源；这里只触发一次临时 AI 回复。
         entry.updatedAt = new Date().toISOString();
         console.info(
           `[drawless coworker] observed cursor chat in ${roomId} from ${event.userName}: ${event.message}`
         );
+        void replyToCursorChat({ client, event, agent: this.cursorChatReplyAgent })
+          .then(() => {
+            entry.updatedAt = new Date().toISOString();
+          })
+          .catch((error) => {
+            console.warn('[drawless coworker] cursor chat reply failed', error);
+          });
       },
       onSyncError: (reason) => {
         entry.status = 'error';
@@ -90,6 +118,7 @@ export class DrawlessCoworkerRoomRegistry {
       status: 'starting',
       snapshot: null,
       lastError: null,
+      recentlyChangedRecordIds: [],
       startedAt: now,
       updatedAt: now,
     };
@@ -106,6 +135,48 @@ export class DrawlessCoworkerRoomRegistry {
   getStatus(roomIdInput: string): DrawlessCoworkerRoomStatusResponse {
     const roomId = parseRoomIdOrThrow(roomIdInput);
     return this.createStatusResponse(roomId, this.entries.get(roomId) ?? null);
+  }
+
+  collectCanvasContext(
+    requestInput: DrawlessCanvasContextRequest
+  ): DrawlessCanvasContextSnapshot {
+    const request = canvasContextRequestSchema.parse(requestInput);
+    const roomId = parseRoomIdOrThrow(request.roomId);
+    const entry = this.entries.get(roomId);
+    if (!entry || !entry.client) {
+      return createUnavailableCanvasContextSnapshot({
+        roomId,
+        reason: 'coworker 尚未进入这个 room，无法读取画布上下文。',
+      });
+    }
+    if (entry.status === 'error' || entry.status === 'stopped') {
+      return createUnavailableCanvasContextSnapshot({
+        roomId,
+        reason: `coworker room client 当前状态为 ${entry.status}，无法读取画布上下文。`,
+      });
+    }
+
+    return createCanvasContextSnapshot({
+      roomId,
+      actorSessionId: entry.client.identity.sessionId,
+      records: entry.client.getRecords(),
+      recentlyChangedRecordIds: entry.recentlyChangedRecordIds,
+      request,
+    });
+  }
+
+  async streamConversation(requestInput: DrawlessCoworkerConversationStreamRequest) {
+    const request = coworkerConversationStreamRequestSchema.parse(requestInput);
+    const roomId = parseRoomIdOrThrow(request.roomId);
+
+    return this.cursorChatReplyAgent.stream(createConversationPrompt(request), {
+      activeTools: ['collect-canvas-context'],
+      maxSteps: 6,
+      memory: {
+        resource: roomId,
+        thread: `${roomId}:conversation`,
+      },
+    });
   }
 
   stop(roomIdInput: string): DrawlessCoworkerStopResponse {
@@ -190,7 +261,25 @@ export class DrawlessCoworkerRoomRegistry {
   }
 }
 
-export const coworkerRoomRegistry = new DrawlessCoworkerRoomRegistry();
+function createConversationPrompt(request: DrawlessCoworkerConversationStreamRequest) {
+  return [
+    '你正在 drawless 的 tldraw 画布里，以 coworker 身份通过 conversation chat 和用户长对话。',
+    '这是长对话通道，不是 cursor chat。你可以给完整分析、步骤、建议和需要确认的问题。',
+    '当用户问题涉及当前画布内容、选区、结构、连线、frame/group、最近变化或“这里/这个”时，先调用 collect-canvas-context。',
+    '当前阶段你只能只读观察和回复，不要声称已经修改画布，也不要输出已执行画布操作。',
+    '',
+    `房间：${request.roomId}`,
+    `用户 conversation chat：${request.message}`,
+  ].join('\n');
+}
+
+function mergeRecentRecordIds(nextIds: string[], existingIds: string[]) {
+  // 最近变化只保留一个短窗口，避免把历史事件误当成长期画布事实。
+  return [...new Set([...nextIds, ...existingIds].map((id) => id.trim()).filter(Boolean))].slice(
+    0,
+    40
+  );
+}
 
 function parseRoomIdOrThrow(roomId: string) {
   const result = parseDrawlessRoomId(roomId);

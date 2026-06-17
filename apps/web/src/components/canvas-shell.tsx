@@ -13,6 +13,7 @@ import {
   createCollaborationState,
   type CollaborationState
 } from "./collaboration-state";
+import { CoworkerConversationWindow } from "./coworker-conversation-window";
 import { useCoworkerControl } from "./coworker-control-state";
 import { useRoomShare } from "./room-share-state";
 
@@ -118,6 +119,7 @@ function SyncedCanvasShell({
     >
       <div className="canvas-shell__editor" data-testid="tldraw-host">
         <Tldraw store={store} />
+        <CoworkerConversationWindow roomId={collaboration.roomId} />
       </div>
     </CanvasShellFrame>
   );

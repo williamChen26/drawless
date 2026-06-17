@@ -1,0 +1,335 @@
+[    2404ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2560ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2562ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2569ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2576ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2578ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2582ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2586ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2601ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2607ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2611ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2612ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2615ms] [WARNING] [zustand devtools middleware] Please install/enable Redux devtools extension @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    2959ms] [ERROR] Warning: forwardRef render functions accept exactly two parameters: props and ref. %s Did you forget to use the ref parameter? @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3007ms] [ERROR] Warning: forwardRef render functions accept exactly two parameters: props and ref. %s Did you forget to use the ref parameter? @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3254ms] [INFO] [HMR] connected. @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3291ms] [LOG] persist-storage with value {"state":{"isShowRecordConfirmDialog":true,"selectPlanInOnboarding":1},"version":0} has been saved @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3437ms] [LOG] [WorkerIndexedDB] ✅ Worker initialized successfully @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3852ms] [ERROR] Warning: %s: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.%s PublicAsterisk 
+    at PublicAsterisk (eval at ../../node_modules/.pnpm/notta-web-icon@8.0.6_@babel+core@7.28.5_react-is@19.2.0/node_modules/notta-web-icon/dist/public-asterisk.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:5243:1), <anonymous>:15:21)
+    at span
+    at div
+    at _c (eval at ../../packages/components/src/ui/mc-button/index.tsx (http://localhost:4000/static/js/index.js:23474:1), <anonymous>:27:11)
+    at div
+    at eval (eval at ../../node_modules/.pnpm/@rc-component+trigger@2.2.7_react-dom@18.3.1_react@18.3.1/node_modules/@rc-component/trigger/es/TriggerWrapper.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:1061:1), TriggerWrapper:11:24)
+    at DomWrapper (eval at ../../node_modules/.pnpm/rc-resize-observer@1.4.3_react-dom@18.3.1_react@18.3.1/node_modules/rc-resize-observer/es/SingleObserver/DomWrapper.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:7078:1), <anonymous>:23:90)
+    at SingleObserver (eval at ../../node_modules/.pnpm/rc-resize-observer@1.4.3_react-dom@18.3.1_react@18.3.1/node_modules/rc-resize-observer/es/SingleObserver/index.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:7083:1), <anonymous>:23:24)
+    at ResizeObserver (eval at ../../node_modules/.pnpm/rc-resize-observer@1.4.3_react-dom@18.3.1_react@18.3.1/node_modules/rc-resize-observer/es/index.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:7088:1), <anonymous>:24:24)
+    at eval (eval at ../../node_modules/.pnpm/@rc-component+trigger@2.2.7_react-dom@18.3.1_react@18.3.1/node_modules/@rc-component/trigger/es/index.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:1091:1), Trigger:61:34)
+    at Tooltip (eval at ../../node_modules/.pnpm/rc-tooltip@6.4.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-tooltip/es/Tooltip.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:7703:1), <anonymous>:28:32)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/tooltip/index.js (http://localhost:4000/static/js/antd.js:2019:1), Tooltip:52:18)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/popover/index.js (http://localhost:4000/static/js/antd.js:1254:1), Popover:44:18)
+    at TuningPanel
+    at InitialProvider (eval at ./src/wrappers/root-wrapper/InitialProvider.tsx (http://localhost:4000/static/js/index.js:21584:1), <anonymous>:44:11)
+    at div
+    at RootWrapper (eval at ./src/wrappers/root-wrapper/index.tsx (http://localhost:4000/static/js/index.js:21594:1), <anonymous>:40:90)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at RenderErrorBoundary (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:524:5)
+    at DataRoutes (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:682:5)
+    at Router (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1201:15)
+    at RouterProvider (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:469:5)
+    at div
+    at div
+    at App (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/app/App.js (http://localhost:4000/static/js/antd.js:219:1), App:29:16)
+    at MotionWrapper (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/MotionWrapper.js (http://localhost:4000/static/js/antd.js:464:1), <anonymous>:19:59)
+    at ProviderChildren (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), <anonymous>:140:5)
+    at ConfigProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), ConfigProvider:440:54)
+    at ErrorBoundary (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/errorboundary.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10618:1), <anonymous>:38:5)
+    at Suspense
+    at App
+    at Profiler (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/profiler.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10633:1), <anonymous>:38:5)
+    at profiler(App) @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3854ms] [LOG] [HttpRequest][x-ux-pref] useDataInitializer: setupHttpRequest applied (may reset default headers) {hasToken: false, cookieUxPrefPresent: false, cookieUxPrefLength: 0} @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3855ms] [LOG] Init Extension {isMeetingExtensionInstalled: false, isAgentExtensionInstalled: false} @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3857ms] [LOG] [HttpRequest][x-ux-pref] useDataInitializer: setupHttpRequest applied (may reset default headers) {hasToken: false, cookieUxPrefPresent: false, cookieUxPrefLength: 0} @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    3858ms] [LOG] Init Extension {isMeetingExtensionInstalled: false, isAgentExtensionInstalled: false} @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4087ms] [LOG] generate aes key by nano id: len=16 @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4087ms] [LOG] encryptAesKeyByRSA: aesKey len=16 @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4122ms] [LOG] encrypt aes key by public key success @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4137ms] [LOG] [Route] Page changed {url: http://localhost:4000/login} @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4186ms] [ERROR] Warning: %s: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.%s LoginSso 
+    at LoginSso (eval at ../../node_modules/.pnpm/notta-web-icon@8.0.6_@babel+core@7.28.5_react-is@19.2.0/node_modules/notta-web-icon/dist/login-SSO.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:4943:1), <anonymous>:15:21)
+    at div
+    at _c (eval at ../../packages/components/src/ui/text-with-icon/index.tsx (http://localhost:4000/static/js/index.js:23859:1), <anonymous>:34:13)
+    at button
+    at Wave (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/_util/wave/index.js (http://localhost:4000/static/js/antd.js:169:1), Wave:25:5)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/button/button.js (http://localhost:4000/static/js/antd.js:319:1), Button:74:7)
+    at SsoSignButton (eval at ./src/modules/account/components/sign-button-sso/index.tsx (http://localhost:4000/static/js/index.js:9669:1), <anonymous>:25:11)
+    at div
+    at Item (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/space/Item.js (http://localhost:4000/static/js/antd.js:1464:1), <anonymous>:13:3)
+    at div
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/space/index.js (http://localhost:4000/static/js/antd.js:1474:1), Space:47:83)
+    at ThirdSignButtonGroups
+    at div
+    at div
+    at div
+    at div
+    at div
+    at SignInView (eval at ./src/modules/account/view/sign-in/index.tsx (http://localhost:4000/static/js/index.js:9734:1), <anonymous>:49:72)
+    at SignInView
+    at Suspense
+    at main
+    at LoginPage (eval at ./src/pages/login/index.tsx (http://localhost:4000/static/js/index.js:21139:1), <anonymous>:29:76)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at Outlet (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1180:26)
+    at InitialProvider (eval at ./src/wrappers/root-wrapper/InitialProvider.tsx (http://localhost:4000/static/js/index.js:21584:1), <anonymous>:44:11)
+    at LoggedInWrapper (eval at ./src/wrappers/LoggedInWrapper.tsx (http://localhost:4000/static/js/index.js:21389:1), <anonymous>:39:73)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at RenderErrorBoundary (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:524:5)
+    at DataRoutes (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:682:5)
+    at Router (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1201:15)
+    at RouterProvider (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:469:5)
+    at div
+    at div
+    at App (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/app/App.js (http://localhost:4000/static/js/antd.js:219:1), App:29:16)
+    at MotionWrapper (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/MotionWrapper.js (http://localhost:4000/static/js/antd.js:464:1), <anonymous>:19:59)
+    at ProviderChildren (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), <anonymous>:140:5)
+    at ConfigProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), ConfigProvider:440:54)
+    at ErrorBoundary (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/errorboundary.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10618:1), <anonymous>:38:5)
+    at Suspense
+    at App
+    at Profiler (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/profiler.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10633:1), <anonymous>:38:5)
+    at profiler(App) @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4212ms] [ERROR] Warning: %s: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.%s LoginEmail 
+    at LoginEmail (eval at ../../node_modules/.pnpm/notta-web-icon@8.0.6_@babel+core@7.28.5_react-is@19.2.0/node_modules/notta-web-icon/dist/login-email.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:4948:1), <anonymous>:15:21)
+    at span
+    at span
+    at eval (eval at ../../node_modules/.pnpm/rc-input@1.8.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-input/es/BaseInput.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6393:1), <anonymous>:23:23)
+    at eval (eval at ../../node_modules/.pnpm/rc-input@1.8.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-input/es/Input.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6398:1), <anonymous>:35:28)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/input/Input.js (http://localhost:4000/static/js/antd.js:864:1), Input:59:18)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/index.js (http://localhost:4000/static/js/antd.js:699:1), <anonymous>:62:3)
+    at StatusProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/StatusProvider.js (http://localhost:4000/static/js/antd.js:694:1), <anonymous>:32:3)
+    at div
+    at div
+    at div
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/grid/col.js (http://localhost:4000/static/js/antd.js:804:1), Col:41:42)
+    at FormItemInput (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItemInput.js (http://localhost:4000/static/js/antd.js:704:1), <anonymous>:36:5)
+    at div
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/grid/row.js (http://localhost:4000/static/js/antd.js:819:1), Row:64:18)
+    at div
+    at ItemHolder (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/ItemHolder.js (http://localhost:4000/static/js/antd.js:689:1), <anonymous>:43:7)
+    at Field (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Field.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6208:1), <anonymous>:67:90)
+    at WrapperField (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Field.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6208:1), <anonymous>:616:20)
+    at InternalFormItem (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/index.js (http://localhost:4000/static/js/antd.js:699:1), <anonymous>:76:5)
+    at form
+    at Form (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Form.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6218:1), <anonymous>:28:19)
+    at FormProvider (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/FormContext.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6223:1), <anonymous>:20:31)
+    at FormProvider
+    at DisabledContextProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/DisabledContext.js (http://localhost:4000/static/js/antd.js:459:1), <anonymous>:13:3)
+    at InternalForm (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/Form.js (http://localhost:4000/static/js/antd.js:684:1), <anonymous>:47:62)
+    at div
+    at SignInForm (eval at ./src/modules/account/view/sign-in/components/form/index.tsx (http://localhost:4000/static/js/index.js:9729:1), <anonymous>:53:11)
+    at div
+    at div
+    at div
+    at div
+    at div
+    at div
+    at SignInView (eval at ./src/modules/account/view/sign-in/index.tsx (http://localhost:4000/static/js/index.js:9734:1), <anonymous>:49:72)
+    at SignInView
+    at Suspense
+    at main
+    at LoginPage (eval at ./src/pages/login/index.tsx (http://localhost:4000/static/js/index.js:21139:1), <anonymous>:29:76)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at Outlet (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1180:26)
+    at InitialProvider (eval at ./src/wrappers/root-wrapper/InitialProvider.tsx (http://localhost:4000/static/js/index.js:21584:1), <anonymous>:44:11)
+    at LoggedInWrapper (eval at ./src/wrappers/LoggedInWrapper.tsx (http://localhost:4000/static/js/index.js:21389:1), <anonymous>:39:73)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at RenderErrorBoundary (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:524:5)
+    at DataRoutes (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:682:5)
+    at Router (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1201:15)
+    at RouterProvider (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:469:5)
+    at div
+    at div
+    at App (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/app/App.js (http://localhost:4000/static/js/antd.js:219:1), App:29:16)
+    at MotionWrapper (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/MotionWrapper.js (http://localhost:4000/static/js/antd.js:464:1), <anonymous>:19:59)
+    at ProviderChildren (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), <anonymous>:140:5)
+    at ConfigProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), ConfigProvider:440:54)
+    at ErrorBoundary (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/errorboundary.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10618:1), <anonymous>:38:5)
+    at Suspense
+    at App
+    at Profiler (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/profiler.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10633:1), <anonymous>:38:5)
+    at profiler(App) @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4214ms] [ERROR] Warning: %s: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.%s LoginPassword 
+    at LoginPassword (eval at ../../node_modules/.pnpm/notta-web-icon@8.0.6_@babel+core@7.28.5_react-is@19.2.0/node_modules/notta-web-icon/dist/login-password.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:4963:1), <anonymous>:15:21)
+    at span
+    at span
+    at eval (eval at ../../node_modules/.pnpm/rc-input@1.8.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-input/es/BaseInput.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6393:1), <anonymous>:23:23)
+    at eval (eval at ../../node_modules/.pnpm/rc-input@1.8.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-input/es/Input.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6398:1), <anonymous>:35:28)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/input/Input.js (http://localhost:4000/static/js/antd.js:864:1), Input:59:18)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/input/Password.js (http://localhost:4000/static/js/antd.js:879:1), Input.Password:45:15)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/index.js (http://localhost:4000/static/js/antd.js:699:1), <anonymous>:62:3)
+    at StatusProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/StatusProvider.js (http://localhost:4000/static/js/antd.js:694:1), <anonymous>:32:3)
+    at div
+    at div
+    at div
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/grid/col.js (http://localhost:4000/static/js/antd.js:804:1), Col:41:42)
+    at FormItemInput (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItemInput.js (http://localhost:4000/static/js/antd.js:704:1), <anonymous>:36:5)
+    at div
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/grid/row.js (http://localhost:4000/static/js/antd.js:819:1), Row:64:18)
+    at div
+    at ItemHolder (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/ItemHolder.js (http://localhost:4000/static/js/antd.js:689:1), <anonymous>:43:7)
+    at Field (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Field.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6208:1), <anonymous>:67:90)
+    at WrapperField (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Field.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6208:1), <anonymous>:616:20)
+    at InternalFormItem (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/index.js (http://localhost:4000/static/js/antd.js:699:1), <anonymous>:76:5)
+    at form
+    at Form (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Form.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6218:1), <anonymous>:28:19)
+    at FormProvider (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/FormContext.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6223:1), <anonymous>:20:31)
+    at FormProvider
+    at DisabledContextProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/DisabledContext.js (http://localhost:4000/static/js/antd.js:459:1), <anonymous>:13:3)
+    at InternalForm (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/Form.js (http://localhost:4000/static/js/antd.js:684:1), <anonymous>:47:62)
+    at div
+    at SignInForm (eval at ./src/modules/account/view/sign-in/components/form/index.tsx (http://localhost:4000/static/js/index.js:9729:1), <anonymous>:53:11)
+    at div
+    at div
+    at div
+    at div
+    at div
+    at div
+    at SignInView (eval at ./src/modules/account/view/sign-in/index.tsx (http://localhost:4000/static/js/index.js:9734:1), <anonymous>:49:72)
+    at SignInView
+    at Suspense
+    at main
+    at LoginPage (eval at ./src/pages/login/index.tsx (http://localhost:4000/static/js/index.js:21139:1), <anonymous>:29:76)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at Outlet (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1180:26)
+    at InitialProvider (eval at ./src/wrappers/root-wrapper/InitialProvider.tsx (http://localhost:4000/static/js/index.js:21584:1), <anonymous>:44:11)
+    at LoggedInWrapper (eval at ./src/wrappers/LoggedInWrapper.tsx (http://localhost:4000/static/js/index.js:21389:1), <anonymous>:39:73)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at RenderErrorBoundary (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:524:5)
+    at DataRoutes (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:682:5)
+    at Router (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1201:15)
+    at RouterProvider (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:469:5)
+    at div
+    at div
+    at App (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/app/App.js (http://localhost:4000/static/js/antd.js:219:1), App:29:16)
+    at MotionWrapper (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/MotionWrapper.js (http://localhost:4000/static/js/antd.js:464:1), <anonymous>:19:59)
+    at ProviderChildren (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), <anonymous>:140:5)
+    at ConfigProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), ConfigProvider:440:54)
+    at ErrorBoundary (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/errorboundary.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10618:1), <anonymous>:38:5)
+    at Suspense
+    at App
+    at Profiler (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/profiler.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10633:1), <anonymous>:38:5)
+    at profiler(App) @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4215ms] [ERROR] Warning: %s: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.%s LoginEyeOff 
+    at LoginEyeOff (eval at ../../node_modules/.pnpm/notta-web-icon@8.0.6_@babel+core@7.28.5_react-is@19.2.0/node_modules/notta-web-icon/dist/login-eye-off.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:4953:1), <anonymous>:15:21)
+    at span
+    at span
+    at eval (eval at ../../node_modules/.pnpm/rc-input@1.8.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-input/es/BaseInput.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6393:1), <anonymous>:23:23)
+    at eval (eval at ../../node_modules/.pnpm/rc-input@1.8.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-input/es/Input.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6398:1), <anonymous>:35:28)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/input/Input.js (http://localhost:4000/static/js/antd.js:864:1), Input:59:18)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/input/Password.js (http://localhost:4000/static/js/antd.js:879:1), Input.Password:45:15)
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/index.js (http://localhost:4000/static/js/antd.js:699:1), <anonymous>:62:3)
+    at StatusProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/StatusProvider.js (http://localhost:4000/static/js/antd.js:694:1), <anonymous>:32:3)
+    at div
+    at div
+    at div
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/grid/col.js (http://localhost:4000/static/js/antd.js:804:1), Col:41:42)
+    at FormItemInput (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItemInput.js (http://localhost:4000/static/js/antd.js:704:1), <anonymous>:36:5)
+    at div
+    at eval (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/grid/row.js (http://localhost:4000/static/js/antd.js:819:1), Row:64:18)
+    at div
+    at ItemHolder (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/ItemHolder.js (http://localhost:4000/static/js/antd.js:689:1), <anonymous>:43:7)
+    at Field (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Field.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6208:1), <anonymous>:67:90)
+    at WrapperField (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Field.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6208:1), <anonymous>:616:20)
+    at InternalFormItem (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/FormItem/index.js (http://localhost:4000/static/js/antd.js:699:1), <anonymous>:76:5)
+    at form
+    at Form (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/Form.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6218:1), <anonymous>:28:19)
+    at FormProvider (eval at ../../node_modules/.pnpm/rc-field-form@2.7.0_react-dom@18.3.1_react@18.3.1/node_modules/rc-field-form/es/FormContext.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:6223:1), <anonymous>:20:31)
+    at FormProvider
+    at DisabledContextProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/DisabledContext.js (http://localhost:4000/static/js/antd.js:459:1), <anonymous>:13:3)
+    at InternalForm (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/form/Form.js (http://localhost:4000/static/js/antd.js:684:1), <anonymous>:47:62)
+    at div
+    at SignInForm (eval at ./src/modules/account/view/sign-in/components/form/index.tsx (http://localhost:4000/static/js/index.js:9729:1), <anonymous>:53:11)
+    at div
+    at div
+    at div
+    at div
+    at div
+    at div
+    at SignInView (eval at ./src/modules/account/view/sign-in/index.tsx (http://localhost:4000/static/js/index.js:9734:1), <anonymous>:49:72)
+    at SignInView
+    at Suspense
+    at main
+    at LoginPage (eval at ./src/pages/login/index.tsx (http://localhost:4000/static/js/index.js:21139:1), <anonymous>:29:76)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at Outlet (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1180:26)
+    at InitialProvider (eval at ./src/wrappers/root-wrapper/InitialProvider.tsx (http://localhost:4000/static/js/index.js:21584:1), <anonymous>:44:11)
+    at LoggedInWrapper (eval at ./src/wrappers/LoggedInWrapper.tsx (http://localhost:4000/static/js/index.js:21389:1), <anonymous>:39:73)
+    at RenderedRoute (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:577:5)
+    at RenderErrorBoundary (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:524:5)
+    at DataRoutes (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:682:5)
+    at Router (eval at ../../node_modules/.pnpm/react-router@6.22.3_react@18.3.1/node_modules/react-router/dist/index.js (http://localhost:4000/static/js/react.js:343:1), <anonymous>:1201:15)
+    at RouterProvider (eval at ../../node_modules/.pnpm/react-router-dom@6.22.3_react-dom@18.3.1_react@18.3.1/node_modules/react-router-dom/dist/index.js (http://localhost:4000/static/js/react.js:338:1), <anonymous>:469:5)
+    at div
+    at div
+    at App (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/app/App.js (http://localhost:4000/static/js/antd.js:219:1), App:29:16)
+    at MotionWrapper (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/MotionWrapper.js (http://localhost:4000/static/js/antd.js:464:1), <anonymous>:19:59)
+    at ProviderChildren (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), <anonymous>:140:5)
+    at ConfigProvider (eval at ../../node_modules/.pnpm/antd@5.26.4_date-fns@2.30.0_react-dom@18.3.1_react@18.3.1/node_modules/antd/es/config-provider/index.js (http://localhost:4000/static/js/antd.js:524:1), ConfigProvider:440:54)
+    at ErrorBoundary (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/errorboundary.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10618:1), <anonymous>:38:5)
+    at Suspense
+    at App
+    at Profiler (eval at ../../node_modules/.pnpm/@sentry+react@10.36.0_react@18.3.1/node_modules/@sentry/react/build/esm/profiler.js (http://localhost:4000/static/js/vendors-node_modules_pnpm_atlaskit_pragmatic-drag-and-drop-flourish_1_1_2__types_react_18_3_1-beb6cf.js:10633:1), <anonymous>:38:5)
+    at profiler(App) @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[    4329ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:4000/login:0
+[    4583ms] [ERROR] Not signed in with the identity provider. @ http://localhost:4000/login:0
+[   10822ms] [ERROR] [GSI_LOGGER]: FedCM get() rejects with NetworkError: Error retrieving a token. @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.386.8:0
+[ 2247481ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 2248992ms] [INFO] [HMR] connected. @ :173
+[ 6284380ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6286635ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6286635ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6290014ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6290014ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6295079ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6295079ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6302676ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6302676ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6314072ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6314073ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6331171ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6331171ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6356810ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6356811ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6395271ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6395274ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6452951ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6452951ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6539454ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6539454ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6669205ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6669205ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 6863826ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 6863826ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 7155760ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 7155761ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 7593662ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 7593663ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 8250509ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 8250509ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[ 9235778ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[ 9235779ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[13167922ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[13167922ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[15384765ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[15384765ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[19000788ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[19000789ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[24048822ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[24048822ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[69551754ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[69551759ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[80774553ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[80774554ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210

@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  canvasOperationPermissionSchema,
-  canvasOperationRequestSchema,
+  canvasContextRequestSchema,
+  canvasContextSnapshotSchema,
   canvasSemanticGraphSchema,
   canvasSummarySchema,
-  coworkerChatMessageSchema,
-  coworkerConversationRequestSchema,
-  coworkerConversationResponseSchema,
+  coworkerConversationStreamRequestSchema,
   coworkerControlConfigSchema,
   coworkerIdentitySchema,
-  coworkerRoomConfigSchema,
   coworkerRoomStatusResponseSchema,
   coworkerStartRequestSchema,
   coworkerStopResponseSchema,
@@ -148,15 +145,6 @@ describe("drawless shared contracts", () => {
       })
     ).toMatchObject({ waitUntilLoaded: false });
 
-    expect(
-      coworkerRoomConfigSchema.parse({
-        roomId: "alpha",
-        enabled: true,
-        autoJoin: false,
-        allowProactiveCursorChat: true,
-        allowCanvasOperationRequests: true
-      })
-    ).toMatchObject({ allowProactiveCursorChat: true });
   });
 
   it("validates canvas summaries and observation events", () => {
@@ -244,109 +232,84 @@ describe("drawless shared contracts", () => {
     ).toBe(false);
   });
 
-  it("validates coworker chat messages and operation permission", () => {
-    const chatMessage = coworkerChatMessageSchema.parse({
-      messageId: "message-1",
+  it("validates canvas context collection contracts", () => {
+    const request = canvasContextRequestSchema.parse({
       roomId: "alpha",
-      channel: "cursor_chat",
-      sender: "coworker",
-      senderSessionId: "coworker:alpha:instance-1",
-      intent: "question",
-      text: "这里要不要补一个问题列表？",
-      createdAt: "2026-06-11T00:00:02.000Z",
-      canvasContext: {
-        currentPageId: "page:page",
-        focusedRecordIds: ["shape:task"],
-        cursor: { x: 120, y: 240 },
-        summary: null
-      }
+      currentPageId: "page:page",
+      focusedRecordIds: ["shape:goal"],
+      cursor: { x: 120, y: 240 },
+      maxNodes: 60
     });
 
-    expect(chatMessage.canvasContext?.cursor).toEqual({ x: 120, y: 240 });
+    expect(request.focusedRecordIds).toEqual(["shape:goal"]);
     expect(
-      coworkerChatMessageSchema.safeParse({
-        ...chatMessage,
-        channel: "side_panel"
-      }).success
-    ).toBe(false);
-
-    const operationRequest = canvasOperationRequestSchema.parse({
-      requestId: "request-1",
-      roomId: "alpha",
-      channel: "cursor_chat",
-      messageId: "message-1",
-      createdAt: "2026-06-11T00:00:03.000Z",
-      operationType: "create_note",
-      description: "在任务拆解区域右侧新增一个问题列表。",
-      targetDescription: "任务拆解区域右侧",
-      riskLevel: "low"
-    });
-
-    expect(operationRequest.riskLevel).toBe("low");
-    expect(
-      canvasOperationRequestSchema.safeParse({
-        ...operationRequest,
-        riskLevel: "high"
-      }).success
-    ).toBe(false);
-
-    const permission = canvasOperationPermissionSchema.parse({
-      requestId: "request-1",
-      roomId: "alpha",
-      channel: "cursor_chat",
-      approvedBySessionId: "device:tab-1",
-      approvedMessageId: "message-2",
-      approvedText: "可以，帮我补上。",
-      approvedAt: "2026-06-11T00:00:04.000Z"
-    });
-
-    expect(permission.approvedBySessionId).toBe("device:tab-1");
-  });
-
-  it("validates coworker conversation requests and responses", () => {
-    const userMessage = coworkerChatMessageSchema.parse({
-      messageId: "message-user-1",
-      roomId: "alpha",
-      channel: "conversation_chat",
-      sender: "user",
-      senderSessionId: "device:tab-1",
-      intent: "message",
-      text: "帮我看看这个画布现在缺什么？",
-      createdAt: "2026-06-11T00:00:05.000Z",
-      canvasContext: null
-    });
-
-    const request = coworkerConversationRequestSchema.parse({
-      roomId: "alpha",
-      userMessage,
-      canvasSummary: null,
-      canvasSemanticGraph: null
-    });
-
-    expect(request.userMessage.sender).toBe("user");
-
-    const response = coworkerConversationResponseSchema.parse({
-      roomId: "alpha",
-      replyMessage: {
-        messageId: "message-coworker-1",
+      canvasContextRequestSchema.safeParse({
         roomId: "alpha",
-        channel: "conversation_chat",
-        sender: "coworker",
-        senderSessionId: "coworker:alpha:instance-1",
-        intent: "message",
-        text: "我可以先基于画布摘要给你只读建议。",
-        createdAt: "2026-06-11T00:00:06.000Z",
-        canvasContext: null
+        maxNodes: 1
+      }).success
+    ).toBe(false);
+
+    const context = canvasContextSnapshotSchema.parse({
+      roomId: "alpha",
+      available: true,
+      capturedAt: "2026-06-11T00:00:00.000Z",
+      currentPageId: "page:page",
+      summary: {
+        roomId: "alpha",
+        capturedAt: "2026-06-11T00:00:00.000Z",
+        currentPageId: "page:page",
+        summary: "画布包含 1 个 shape。",
+        focus: {
+          selectedRecordIds: ["shape:goal"],
+          recentlyChangedRecordIds: ["shape:goal"],
+          viewportRecordIds: ["shape:goal"]
+        },
+        recentEvents: []
       },
-      operationRequest: null
+      semanticGraph: {
+        roomId: "alpha",
+        generatedAt: "2026-06-11T00:00:00.000Z",
+        currentPageId: "page:page",
+        nodes: [
+          {
+            id: "shape:goal",
+            kind: "text",
+            shapeType: "text",
+            text: "项目目标",
+            bounds: { x: 10, y: 20, w: 120, h: 40 },
+            parentId: "page:page",
+            pageId: "page:page"
+          }
+        ],
+        edges: [],
+        regions: []
+      },
+      focus: {
+        selectedRecordIds: ["shape:goal"],
+        focusedRecordIds: ["shape:goal"],
+        nearbyRecordIds: ["shape:goal"],
+        recentlyChangedRecordIds: ["shape:goal"]
+      },
+      warnings: []
     });
 
-    expect(response.operationRequest).toBeNull();
+    expect(context.available).toBe(true);
+    expect(context.semanticGraph?.nodes[0]?.text).toBe("项目目标");
+  });
+
+  it("validates coworker conversation stream requests", () => {
+    const request = coworkerConversationStreamRequestSchema.parse({
+      roomId: "alpha",
+      message: "帮我看看这个画布现在缺什么？"
+    });
+
+    expect(request.roomId).toBe("alpha");
     expect(
-      coworkerConversationResponseSchema.safeParse({
-        ...response,
-        replyMessage: { ...response.replyMessage, sender: "system" }
+      coworkerConversationStreamRequestSchema.safeParse({
+        roomId: "alpha",
+        message: ""
       }).success
     ).toBe(false);
   });
+
 });

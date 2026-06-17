@@ -720,17 +720,18 @@ server 只补充最小控制能力：
 目标：
 
 - 用户通过 conversation chat 请求 coworker 看当前 room。
-- coworker 能接收一个由 web 或 server 提供的画布摘要。
+- coworker 能按需通过 `collect-canvas-context` 读取当前 room 的只读画布上下文。
 - coworker 能在 conversation chat 中回复用户。
 - 这个阶段 coworker 不操作画布。
 
 可能实现：
 
-- web 从 tldraw editor/store 读取当前选区和简化 records。
-- web 调用 server conversation API，由 server 转发到 coworker API。
-- coworker 返回一段只读回复。
+- web 提供一个可打开/关闭的 conversation chat 浮窗，并把用户消息流式发送给 server。
+- server 暴露 `/rooms/:roomId/coworker/conversation/stream`，只做 roomId 校验和 coworker API 转发。
+- coworker 暴露 `/drawless/rooms/:roomId/coworker/conversation/stream`，调用 Mastra agent 的 `stream()` 返回文本流。
+- agent 判断问题需要画布事实时调用 `collect-canvas-context`；上下文从 coworker 已同步的 tldraw store 派生，web 不再提交第二套画布摘要。
 
-这个阶段不要求 coworker 真正常驻 room，但契约要按常驻 room 设计。
+这个阶段要求 coworker 已经以协作者身份进入 room；tldraw document 仍然是唯一画布事实源。
 
 ### Phase 2：coworker 常驻观察 room
 
@@ -1095,9 +1096,10 @@ coworker 会读取画布内容，因此要明确：
 
 当前 Mastra agent 使用 `Memory`，后续要决定 memory 的范围：
 
-- room 级 memory。
-- 用户级 memory。
-- session 级 memory。
+- `resource` 使用当前 `roomId`，表示 memory 隶属于这个协同房间。
+- cursor chat 使用 `thread: ${roomId}:cursor`，只承载现场短回复上下文。
+- conversation chat 使用 `thread: ${roomId}:conversation`，承载长对话上下文。
+- 第一版不把 cursor chat 和 conversation chat 混进同一个 thread，避免短消息噪音污染长对话。
 - 是否允许清除。
 
 ### 14.3 风险等级
@@ -1114,26 +1116,23 @@ MVP 只做 low。
 
 ```text
 packages/shared/src/
-  coworker.ts
-  canvas-observation.ts
-  canvas-operation-permission.ts
+  index.ts
 
 apps/coworker/src/mastra/
   agents/drawless-coworker.ts
-  tools/canvas-conversation-tool.ts
-  runtime/room-connector.ts
-  runtime/canvas-mirror.ts
-  runtime/observation-buffer.ts
-  runtime/action-executor.ts
-  runtime/proactive-chat-policy.ts
+  tools/canvas-context-tool.ts
+  tools/canvas-context-reader.ts
+  collaboration/coworker-room-client.ts
+  collaboration/coworker-room-registry.ts
+  collaboration/cursor-chat-reply-handler.ts
 
 apps/server/src/
-  coworker/coworker-config.ts
-  coworker/coworker-session.ts
+  coworker/coworker-control-client.ts
 
 apps/web/src/
-  lib/canvas-observation.ts
-  lib/coworker-client.ts
+  lib/coworker-control.ts
+  lib/coworker-conversation.ts
+  components/coworker-conversation-window.tsx
 ```
 
 这个结构只是方向，不代表要一次性创建所有文件。

@@ -1,5 +1,6 @@
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
+import { Readable } from "node:stream";
 import type {
   DrawlessHealthResponse,
   DrawlessReadyResponse,
@@ -7,6 +8,7 @@ import type {
   DrawlessStorageSummary
 } from "@drawless/shared";
 import {
+  coworkerConversationStreamRequestSchema,
   parseDrawlessRoomId,
   serverCoworkerStartRequestSchema
 } from "@drawless/shared";
@@ -151,6 +153,55 @@ export async function createServerApp({
 
       try {
         return await resolvedCoworkerClient.status(roomId.value);
+      } catch (error) {
+        return sendCoworkerControlError(reply, error);
+      }
+    }
+  );
+
+  app.post<{ Params: CoworkerRouteParams }>(
+    "/rooms/:roomId/coworker/conversation/stream",
+    async (request, reply) => {
+      const roomId = parseRoomIdForHttp(request.params.roomId);
+      if (!roomId.ok) {
+        return reply.code(400).send({ ok: false, error: roomId.error });
+      }
+
+      const body = coworkerConversationStreamRequestSchema.safeParse({
+        ...(request.body && typeof request.body === "object" ? request.body : {}),
+        roomId: roomId.value
+      });
+      if (!body.success) {
+        return reply.code(400).send({
+          ok: false,
+          error:
+            body.error.issues[0]?.message ??
+            "Invalid coworker conversation request."
+        });
+      }
+
+      if (!config.coworker.enabled || !resolvedCoworkerClient) {
+        return reply.code(503).send({
+          ok: false,
+          error: "Coworker control is disabled."
+        });
+      }
+
+      try {
+        const response = await resolvedCoworkerClient.streamConversation(
+          roomId.value,
+          body.data
+        );
+        if (!response.body) {
+          return reply.code(502).send({
+            ok: false,
+            error: "Coworker conversation stream is empty."
+          });
+        }
+
+        reply.header("content-type", "text/plain; charset=utf-8");
+        reply.header("cache-control", "no-cache");
+        return reply.send(Readable.fromWeb(response.body));
       } catch (error) {
         return sendCoworkerControlError(reply, error);
       }

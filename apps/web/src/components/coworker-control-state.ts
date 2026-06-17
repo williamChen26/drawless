@@ -68,7 +68,6 @@ export function useCoworkerControl(roomId: string): CoworkerControlState {
 
     request
       .then((result) => {
-        console.log('result', result);
         if (!result.ok) {
           setView(createCoworkerErrorView(result.error));
           return;
@@ -77,7 +76,6 @@ export function useCoworkerControl(roomId: string): CoworkerControlState {
         setView(createCoworkerSuccessView(result.value, action));
       })
       .catch((error: unknown) => {
-        console.log('error', error);
         setView(
           createCoworkerErrorView({
             code: "HTTP_ERROR",

@@ -82,9 +82,9 @@ describe("server app", () => {
 
   it("forwards coworker lifecycle requests through the configured client", async () => {
     const calls: Array<{
-      method: "start" | "status" | "stop";
+      method: "start" | "status" | "stop" | "streamConversation";
       roomId: string;
-      request?: DrawlessServerCoworkerStartRequest;
+      request?: DrawlessServerCoworkerStartRequest | { roomId: string; message: string };
     }> = [];
     const status: DrawlessCoworkerRoomStatusResponse = {
       roomId: "alpha",
@@ -112,6 +112,12 @@ describe("server app", () => {
           stopped: true,
           status: "stopped"
         };
+      },
+      streamConversation: async (roomId, request) => {
+        calls.push({ method: "streamConversation", roomId, request });
+        return new Response("hello from coworker", {
+          headers: { "content-type": "text/plain; charset=utf-8" }
+        });
       }
     };
     const { app } = await createServerApp({
@@ -143,6 +149,14 @@ describe("server app", () => {
     expect(stop.statusCode).toBe(200);
     expect(stop.json()).toMatchObject({ roomId: "alpha", stopped: true });
 
+    const conversation = await app.inject({
+      method: "POST",
+      url: "/rooms/alpha/coworker/conversation/stream",
+      payload: { message: "帮我看看画布。" }
+    });
+    expect(conversation.statusCode).toBe(200);
+    expect(conversation.body).toBe("hello from coworker");
+
     expect(calls).toEqual([
       {
         method: "start",
@@ -150,7 +164,12 @@ describe("server app", () => {
         request: { waitUntilLoaded: false }
       },
       { method: "status", roomId: "alpha" },
-      { method: "stop", roomId: "alpha" }
+      { method: "stop", roomId: "alpha" },
+      {
+        method: "streamConversation",
+        roomId: "alpha",
+        request: { roomId: "alpha", message: "帮我看看画布。" }
+      }
     ]);
 
     await app.close();

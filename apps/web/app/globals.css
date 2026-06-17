@@ -131,3 +131,91 @@ select {
   line-height: 1.45;
   white-space: pre-wrap;
 }
+
+.coworker-conversation__toggle {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+  min-width: 64px;
+  height: 34px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #111;
+}
+
+.coworker-conversation {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 92px));
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #111;
+}
+
+.coworker-conversation__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+.coworker-conversation__header button,
+.coworker-conversation__form button {
+  min-width: 56px;
+  height: 30px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #111;
+}
+
+.coworker-conversation__body {
+  min-height: 180px;
+  overflow: auto;
+  padding: 10px 12px;
+}
+
+.coworker-conversation__empty,
+.coworker-conversation__entry pre {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.coworker-conversation__entry {
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.coworker-conversation__entry strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.coworker-conversation__entry pre {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.coworker-conversation__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #ddd;
+}
+
+.coworker-conversation__form textarea {
+  min-width: 0;
+  resize: vertical;
+  border: 1px solid #ccc;
+  padding: 8px;
+}

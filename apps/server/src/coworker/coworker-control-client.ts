@@ -1,7 +1,9 @@
 import {
   coworkerRoomStatusResponseSchema,
   coworkerStopResponseSchema,
+  coworkerConversationStreamRequestSchema,
   type DrawlessCoworkerControlConfig,
+  type DrawlessCoworkerConversationStreamRequest,
   type DrawlessCoworkerRoomStatusResponse,
   type DrawlessCoworkerStartRequest,
   type DrawlessCoworkerStopResponse,
@@ -19,6 +21,11 @@ export interface CoworkerControlClient {
   status(roomId: DrawlessRoomId): Promise<DrawlessCoworkerRoomStatusResponse>;
   /** 请求 coworker 离开指定 room 并释放本地 sync client。 */
   stop(roomId: DrawlessRoomId): Promise<DrawlessCoworkerStopResponse>;
+  /** 向 coworker 发送 conversation chat 长对话请求并返回流式响应。 */
+  streamConversation(
+    roomId: DrawlessRoomId,
+    request: DrawlessCoworkerConversationStreamRequest
+  ): Promise<Response>;
 }
 
 export class CoworkerControlClientError extends Error {
@@ -77,8 +84,69 @@ export function createCoworkerControlClient(
       });
 
       return coworkerStopResponseSchema.parse(payload);
+    },
+    streamConversation: async (roomId, request) => {
+      const body = coworkerConversationStreamRequestSchema.parse({
+        ...request,
+        roomId
+      });
+      return sendCoworkerStreamRequest({
+        config,
+        roomId,
+        action: "conversation/stream",
+        body
+      });
     }
   };
+}
+
+async function sendCoworkerStreamRequest(input: {
+  /** coworker 控制面配置。 */
+  config: DrawlessCoworkerControlConfig;
+  /** 要对话的协同房间 ID。 */
+  roomId: DrawlessRoomId;
+  /** coworker custom API 的流式动作名称。 */
+  action: "conversation/stream";
+  /** POST 请求体。 */
+  body: DrawlessCoworkerConversationStreamRequest;
+}) {
+  if (!input.config.baseUrl) {
+    throw new CoworkerControlClientError("Coworker control base url is not configured.", 503);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.config.requestTimeoutMs);
+  try {
+    const response = await fetch(createCoworkerUrl(input), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input.body),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      const payload = await readJson(response);
+      throw new CoworkerControlClientError(
+        extractErrorMessage(payload) ?? `Coworker conversation request failed with ${response.status}.`,
+        response.status
+      );
+    }
+
+    return response;
+  } catch (error) {
+    if (error instanceof CoworkerControlClientError) {
+      throw error;
+    }
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new CoworkerControlClientError("Coworker conversation request timed out.", 504);
+    }
+
+    throw new CoworkerControlClientError(
+      error instanceof Error ? error.message : String(error),
+      502
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function sendCoworkerRequest(input: {
@@ -139,7 +207,7 @@ async function sendCoworkerRequest(input: {
 function createCoworkerUrl(input: {
   config: DrawlessCoworkerControlConfig;
   roomId: DrawlessRoomId;
-  action: "start" | "status" | "stop";
+  action: "start" | "status" | "stop" | "conversation/stream";
 }) {
   const url = new URL(input.config.baseUrl ?? "http://127.0.0.1");
   // coworker custom API 不挂在 Mastra 默认 /api 前缀下，而是直接注册在 root path。

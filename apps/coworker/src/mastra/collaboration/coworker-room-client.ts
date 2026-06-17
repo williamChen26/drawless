@@ -41,7 +41,7 @@ export type DrawlessCoworkerRoomClientOptions = {
   /** sync 协议报告不可恢复错误时的回调。 */
   onSyncError?: (reason: string) => void;
   /** 本地 TLStore 观察到远端文档变化时的回调。 */
-  onRemoteChange?: (snapshot: DrawlessCoworkerRoomSnapshot) => void;
+  onRemoteChange?: (snapshot: DrawlessCoworkerRoomSnapshot, changedRecordIds: string[]) => void;
   /** coworker 观察到用户 cursor chat 时的回调。 */
   onCursorChat?: (event: DrawlessCoworkerCursorChatEvent) => void;
 };
@@ -49,6 +49,8 @@ export type DrawlessCoworkerRoomClientOptions = {
 export type DrawlessCoworkerRoomSnapshot = DrawlessCoworkerRoomSnapshotSummary;
 
 export type DrawlessCoworkerCursorChatEvent = {
+  /** cursor chat 所属的协同房间 ID。 */
+  roomId: DrawlessRoomId;
   /** 发送 cursor chat 的协作者 userId。 */
   userId: string;
   /** 发送 cursor chat 的协作者名称。 */
@@ -106,7 +108,7 @@ export function createDrawlessCoworkerRoomClient(
   // 如果不去重，coworker 会在这段时间内反复回复同一句话。
   const handledCursorChats = new Set<string>();
   // 按远端 presence id 做防抖。用户输入 cursor chat 时，chatMessage 会随着打字不断变化；
-  // 这里等输入稳定一小会儿，再把它当作一条需要回复的消息。
+  // 这里等输入稳定一小会儿，再交给上层决定是否回复。
   const pendingCursorChatTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // coworker 自己发出的 cursor chat 也要自动清空，否则气泡会长时间停留在画布上。
   let clearCursorChatTimer: ReturnType<typeof setTimeout> | null = null;
@@ -160,11 +162,14 @@ export function createDrawlessCoworkerRoomClient(
   });
   // 只监听 remote document 变化，避免把 coworker 自己的本地临时状态误当成用户画布操作。
   const unlistenStore = store.listen(
-    ({ source }) => {
+    ({ source, changes }) => {
       if (source !== 'remote') {
         return;
       }
-      options.onRemoteChange?.(createRoomSnapshot({ roomId, sessionId, store }));
+      options.onRemoteChange?.(
+        createRoomSnapshot({ roomId, sessionId, store }),
+        getChangedRecordIds(changes)
+      );
     },
     { source: 'remote', scope: 'document' }
   );
@@ -180,17 +185,12 @@ export function createDrawlessCoworkerRoomClient(
           continue;
         }
 
-        scheduleCursorChatReply({
+        scheduleCursorChatObservation({
+          roomId,
           presenceRecord: record,
-          identity,
-          localPresence: presence,
           timers: pendingCursorChatTimers,
           handledCursorChats,
           onCursorChat: options.onCursorChat,
-          setClearTimer: (timer) => {
-            clearCursorChatTimer = timer;
-          },
-          getClearTimer: () => clearCursorChatTimer,
         });
       }
     },
@@ -235,15 +235,12 @@ export function createDrawlessCoworkerRoomClient(
   };
 }
 
-function scheduleCursorChatReply(input: {
+function scheduleCursorChatObservation(input: {
+  roomId: DrawlessRoomId;
   presenceRecord: TLInstancePresence;
-  identity: DrawlessCoworkerIdentity;
-  localPresence: ReturnType<typeof atom<TLInstancePresence | null>>;
   timers: Map<string, ReturnType<typeof setTimeout>>;
   handledCursorChats: Set<string>;
   onCursorChat?: (event: DrawlessCoworkerCursorChatEvent) => void;
-  getClearTimer: () => ReturnType<typeof setTimeout> | null;
-  setClearTimer: (timer: ReturnType<typeof setTimeout> | null) => void;
 }) {
   const message = input.presenceRecord.chatMessage.trim();
   if (!message) {
@@ -266,8 +263,10 @@ function scheduleCursorChatReply(input: {
   const timer = setTimeout(() => {
     input.timers.delete(input.presenceRecord.id);
     input.handledCursorChats.add(chatKey);
-    // 这个回调只用于日志或未来观察事件；不把 cursor chat 持久化成第二套事实源。
+    // room client 只负责把 tldraw presence 变化翻译成观察事件。
+    // 是否回复、如何回复交给上层 AI handler，避免协同传输层夹带业务策略。
     input.onCursorChat?.({
+      roomId: input.roomId,
       userId: input.presenceRecord.userId,
       userName: input.presenceRecord.userName,
       message,
@@ -277,17 +276,7 @@ function scheduleCursorChatReply(input: {
         : null,
       observedAt: new Date().toISOString(),
     });
-    publishCoworkerCursorChat({
-      identity: input.identity,
-      localPresence: input.localPresence,
-      message: '收到，我在看这里。',
-      cursor: input.presenceRecord.cursor
-        ? { x: input.presenceRecord.cursor.x + 24, y: input.presenceRecord.cursor.y + 24 }
-        : undefined,
-      getClearTimer: input.getClearTimer,
-      setClearTimer: input.setClearTimer,
-    });
-  }, 500);
+  }, 3000);
 
   input.timers.set(input.presenceRecord.id, timer);
 }
@@ -305,7 +294,7 @@ function publishCoworkerCursorChat(input: {
     return;
   }
 
-  const chatMessage = input.message.trim().slice(0, 64);
+  const chatMessage = input.message.trim();
   if (!chatMessage) {
     return;
   }
@@ -363,7 +352,7 @@ function createCoworkerPresence(input: {
       type: 'default',
       rotation: 0,
     },
-    chatMessage: input.chatMessage.slice(0, 64),
+    chatMessage: input.chatMessage,
     meta: {
       role: 'coworker',
       roomId: input.identity.roomId,
@@ -549,6 +538,18 @@ function createRoomSnapshot(input: {
       .length,
     capturedAt: new Date().toISOString(),
   };
+}
+
+function getChangedRecordIds(changes: {
+  added: Record<string, TLRecord>;
+  updated: Record<string, [TLRecord, TLRecord]>;
+  removed: Record<string, TLRecord>;
+}) {
+  return [
+    ...Object.keys(changes.added),
+    ...Object.keys(changes.updated),
+    ...Object.keys(changes.removed),
+  ];
 }
 
 function joinUrlPath(...parts: string[]) {

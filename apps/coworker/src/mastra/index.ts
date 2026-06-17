@@ -6,13 +6,12 @@ import { DuckDBStore } from "@mastra/duckdb";
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } from '@mastra/observability';
 import { drawlessCoworker } from './agents/drawless-coworker';
-import { coworkerRoomApiRoutes } from './routes/coworker-room-routes';
+import { DrawlessCoworkerRoomRegistry } from './collaboration/coworker-room-registry';
+import { createCoworkerRoomApiRoutes } from './routes/coworker-room-routes';
+import { setCanvasContextCollector } from './tools/canvas-context-tool';
 
 export const mastra = new Mastra({
   agents: { drawlessCoworker },
-  server: {
-    apiRoutes: coworkerRoomApiRoutes,
-  },
   storage: new MastraCompositeStore({
     id: 'composite-storage',
     default: new LibSQLStore({
@@ -41,4 +40,12 @@ export const mastra = new Mastra({
       },
     },
   }),
+});
+
+const registeredDrawlessCoworker = mastra.getAgentById('drawless-coworker');
+const coworkerRoomRegistry = new DrawlessCoworkerRoomRegistry(registeredDrawlessCoworker);
+setCanvasContextCollector((request) => coworkerRoomRegistry.collectCanvasContext(request));
+
+mastra.setServer({
+  apiRoutes: createCoworkerRoomApiRoutes(coworkerRoomRegistry),
 });
