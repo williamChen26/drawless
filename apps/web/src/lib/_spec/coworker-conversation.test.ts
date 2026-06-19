@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createCoworkerConversationStream } from "../coworker-conversation";
+import {
+  createCoworkerConversationStream,
+  readCoworkerConversationEventStream
+} from "../coworker-conversation";
 
 describe("coworker conversation stream client", () => {
   afterEach(() => {
@@ -17,7 +20,7 @@ describe("coworker conversation stream client", () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(stream, {
         status: 200,
-        headers: { "content-type": "text/plain; charset=utf-8" }
+        headers: { "content-type": "text/event-stream; charset=utf-8" }
       })
     );
 
@@ -53,5 +56,38 @@ describe("coworker conversation stream client", () => {
       error: { code: "INVALID_REQUEST" }
     });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("reads coworker conversation SSE events", async () => {
+    const event = {
+      type: "tool-call",
+      from: "AGENT",
+      payload: {
+        toolName: "collect-canvas-context",
+        toolCallId: "call-1"
+      }
+    };
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(`event: tool-call\ndata: ${JSON.stringify(event)}\n\n`)
+        );
+        controller.close();
+      }
+    });
+    const events: unknown[] = [];
+
+    await readCoworkerConversationEventStream(stream, (nextEvent) => {
+      events.push(nextEvent);
+    });
+
+    expect(events).toMatchObject([
+      {
+        type: "tool-call",
+        payload: {
+          toolName: "collect-canvas-context"
+        }
+      }
+    ]);
   });
 });

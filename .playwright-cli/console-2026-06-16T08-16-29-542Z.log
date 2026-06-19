@@ -333,3 +333,8 @@
 [69551759ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
 [80774553ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
 [80774554ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[107357628ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[107357629ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210
+[185382337ms] [ERROR] Failed to load resource: net::ERR_NETWORK_CHANGED @ https://us.i.posthog.com/flags/?v=2&ip=0&_=1781783171179&ver=1.386.8&compression=base64:0
+[241905207ms] [ERROR] WebSocket connection to 'ws://localhost:4000/rsbuild-hmr?compilationId=web__notta_web' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ :225
+[241905210ms] [INFO] [HMR] disconnected. Attempting to reconnect. @ :210

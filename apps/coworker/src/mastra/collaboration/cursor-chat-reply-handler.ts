@@ -15,8 +15,12 @@ export type DrawlessCursorChatReplyAgent = {
       memory?: { resource: string; thread: string };
       activeTools?: string[];
       maxSteps?: number;
+      abortSignal?: AbortSignal;
     }
-  ) => Promise<{ textStream: ReadableStream<string> }>;
+  ) => Promise<{
+    textStream: ReadableStream<string>;
+    fullStream?: AsyncIterable<unknown> | undefined;
+  }>;
 };
 
 export type DrawlessCursorChatReplyInput = {

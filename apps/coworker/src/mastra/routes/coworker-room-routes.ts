@@ -15,6 +15,11 @@ type TextStreamLike = {
   getReader(): TextStreamReader;
 };
 
+type AgentStreamOutput = {
+  textStream: TextStreamLike;
+  fullStream?: AsyncIterable<unknown> | undefined;
+};
+
 // 这组 custom API routes 是 coworker 的控制面，只负责进入、查询、退出 room。
 // 画布读写仍然通过 coworker 自己的 tldraw sync client 走协同边界。
 export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCoworkerRoomRegistry) {
@@ -80,11 +85,16 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
         }
 
         try {
-          const result = await coworkerRoomRegistry.streamConversation(request.data);
-          return new Response(encodeTextStream(result.textStream), {
+          const result = await coworkerRoomRegistry.streamConversation(request.data, {
+            abortSignal: c.req.raw.signal,
+          });
+          return new Response(createConversationSseStream({
+            result,
+          }), {
             headers: {
-              'content-type': 'text/plain; charset=utf-8',
+              'content-type': 'text/event-stream; charset=utf-8',
               'cache-control': 'no-cache',
+              connection: 'keep-alive',
             },
           });
         } catch (error) {
@@ -121,25 +131,87 @@ function toErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function encodeTextStream(stream: TextStreamLike) {
-  const reader = stream.getReader();
+function createConversationSseStream(input: {
+  /** Mastra agent 返回的流式结果。 */
+  result: AgentStreamOutput;
+}) {
   const encoder = new TextEncoder();
 
   return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const { value, done } = await reader.read();
-      if (done) {
-        controller.close();
-        return;
-      }
+    async start(controller) {
+      const emit = (chunk: unknown) => {
+        controller.enqueue(encoder.encode(encodeSseChunk(chunk)));
+      };
 
-      if (value) {
-        controller.enqueue(encoder.encode(value));
+      try {
+        if (input.result.fullStream) {
+          for await (const chunk of input.result.fullStream) {
+            emit(chunk);
+          }
+        } else {
+          await streamTextFallback(input.result.textStream, (text) => {
+            emit({
+              type: 'text-delta',
+              text,
+            });
+          });
+        }
+      } catch (error) {
+        emit({
+          type: 'error',
+          error: serializeUnknown(error),
+        });
+      } finally {
+        controller.close();
       }
-    },
-    async cancel(reason) {
-      // 浏览器或 server 断开连接时，把取消信号继续传给 Mastra 的文本流。
-      await reader.cancel(reason);
     },
   });
+}
+
+function encodeSseChunk(chunk: unknown) {
+  const type = getStringField(chunk, 'type') ?? 'message';
+  return `event: ${type}\ndata: ${JSON.stringify(chunk ?? null)}\n\n`;
+}
+
+async function streamTextFallback(stream: TextStreamLike, onText: (text: string) => void) {
+  const reader = stream.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (value) {
+        onText(value);
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+function getStringField(input: unknown, key: string) {
+  if (!input || typeof input !== 'object' || !(key in input)) {
+    return null;
+  }
+
+  const value = (input as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function serializeUnknown(input: unknown) {
+  if (input instanceof Error) {
+    return {
+      name: input.name,
+      message: input.message,
+      stack: input.stack,
+    };
+  }
+
+  try {
+    JSON.stringify(input);
+    return input;
+  } catch {
+    return String(input);
+  }
 }

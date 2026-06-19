@@ -134,8 +134,8 @@ select {
 
 .coworker-conversation__toggle {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
+  left: 16px;
+  top: 56px;
   z-index: 20;
   min-width: 64px;
   height: 34px;
@@ -146,8 +146,8 @@ select {
 
 .coworker-conversation {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
+  left: 16px;
+  top: 16px;
   z-index: 20;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -167,6 +167,11 @@ select {
   border-bottom: 1px solid #ddd;
 }
 
+.coworker-conversation__status {
+  margin-left: auto;
+  font-size: 12px;
+}
+
 .coworker-conversation__header button,
 .coworker-conversation__form button {
   min-width: 56px;
@@ -183,26 +188,55 @@ select {
 }
 
 .coworker-conversation__empty,
-.coworker-conversation__entry pre {
+.coworker-conversation__message pre,
+.coworker-conversation__events pre {
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.coworker-conversation__entry {
-  padding: 10px 0;
+.coworker-conversation__turn {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
   border-bottom: 1px solid #eee;
 }
 
-.coworker-conversation__entry strong {
+.coworker-conversation__message {
+  display: grid;
+  gap: 6px;
+}
+
+.coworker-conversation__message strong {
   display: block;
-  margin-bottom: 6px;
   font-size: 12px;
 }
 
-.coworker-conversation__entry pre {
+.coworker-conversation__message pre,
+.coworker-conversation__events pre {
   font-size: 12px;
   line-height: 1.45;
+}
+
+.coworker-conversation__events {
+  font-size: 12px;
+}
+
+.coworker-conversation__events ol {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.coworker-conversation__events li {
+  display: grid;
+  gap: 4px;
+}
+
+.coworker-conversation__events code,
+.coworker-conversation__events small {
+  overflow-wrap: anywhere;
 }
 
 .coworker-conversation__form {

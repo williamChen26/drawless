@@ -133,6 +133,29 @@ export async function createCoworkerConversationStream(input: {
   return { ok: true, stream: response.body };
 }
 
+export async function readCoworkerConversationEventStream(
+  stream: ReadableStream<Uint8Array>,
+  onEvent: (event: unknown) => void
+) {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (value) {
+      buffer += decoder.decode(value, { stream: true });
+      buffer = readCompletedSseEvents(buffer, onEvent);
+    }
+  }
+
+  buffer += decoder.decode();
+  readCompletedSseEvents(`${buffer}\n\n`, onEvent);
+}
+
 function createCoworkerConversationStreamUrl(input: {
   /** drawless server 的 HTTP 基础地址。 */
   baseUrl: string;
@@ -171,6 +194,38 @@ function extractErrorMessage(payload: unknown) {
   }
 
   return null;
+}
+
+function readCompletedSseEvents(
+  buffer: string,
+  onEvent: (event: unknown) => void
+) {
+  const parts = buffer.split(/\r?\n\r?\n/u);
+  const pending = parts.pop() ?? "";
+  for (const part of parts) {
+    const event = parseSseEvent(part);
+    if (event) {
+      onEvent(event);
+    }
+  }
+
+  return pending;
+}
+
+function parseSseEvent(rawEvent: string) {
+  const dataLines = rawEvent
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trimStart());
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(dataLines.join("\n")) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function joinUrlPath(...parts: string[]) {

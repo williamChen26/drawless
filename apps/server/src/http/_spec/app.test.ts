@@ -116,7 +116,7 @@ describe("server app", () => {
       streamConversation: async (roomId, request) => {
         calls.push({ method: "streamConversation", roomId, request });
         return new Response("hello from coworker", {
-          headers: { "content-type": "text/plain; charset=utf-8" }
+          headers: { "content-type": "text/event-stream; charset=utf-8" }
         });
       }
     };
@@ -155,6 +155,7 @@ describe("server app", () => {
       payload: { message: "帮我看看画布。" }
     });
     expect(conversation.statusCode).toBe(200);
+    expect(conversation.headers["content-type"]).toContain("text/event-stream");
     expect(conversation.body).toBe("hello from coworker");
 
     expect(calls).toEqual([

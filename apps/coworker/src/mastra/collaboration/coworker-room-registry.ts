@@ -165,13 +165,17 @@ export class DrawlessCoworkerRoomRegistry {
     });
   }
 
-  async streamConversation(requestInput: DrawlessCoworkerConversationStreamRequest) {
+  async streamConversation(
+    requestInput: DrawlessCoworkerConversationStreamRequest,
+    options: { abortSignal?: AbortSignal | undefined } = {}
+  ) {
     const request = coworkerConversationStreamRequestSchema.parse(requestInput);
     const roomId = parseRoomIdOrThrow(request.roomId);
 
     return this.cursorChatReplyAgent.stream(createConversationPrompt(request), {
       activeTools: ['collect-canvas-context'],
       maxSteps: 6,
+      abortSignal: options.abortSignal,
       memory: {
         resource: roomId,
         thread: `${roomId}:conversation`,

@@ -90,3 +90,4 @@ sequenceDiagram
 - `DrawlessCoworkerRoomRegistry` 提供根据 roomId 读取当前 room client 的薄入口。
 - cursor chat 继续只通过 presence 回复，不写 document。
 - conversation chat 复用同一个 `collect-canvas-context` tool，但 memory thread 与 cursor chat 拆开：`${roomId}:conversation` 和 `${roomId}:cursor`。
+- conversation chat 的流式响应只把 Mastra 官方 stream chunk 包成 SSE；`tool-call`、`tool-result` 和 `text-delta` 等事件语义来自 Mastra，不在 drawless 里重复定义。

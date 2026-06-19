@@ -199,7 +199,10 @@ export async function createServerApp({
           });
         }
 
-        reply.header("content-type", "text/plain; charset=utf-8");
+        reply.header(
+          "content-type",
+          response.headers.get("content-type") ?? "text/event-stream; charset=utf-8"
+        );
         reply.header("cache-control", "no-cache");
         return reply.send(Readable.fromWeb(response.body));
       } catch (error) {

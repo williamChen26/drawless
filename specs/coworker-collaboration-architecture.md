@@ -727,9 +727,11 @@ server 只补充最小控制能力：
 可能实现：
 
 - web 提供一个可打开/关闭的 conversation chat 浮窗，并把用户消息流式发送给 server。
-- server 暴露 `/rooms/:roomId/coworker/conversation/stream`，只做 roomId 校验和 coworker API 转发。
-- coworker 暴露 `/drawless/rooms/:roomId/coworker/conversation/stream`，调用 Mastra agent 的 `stream()` 返回文本流。
+- server 暴露 `/rooms/:roomId/coworker/conversation/stream`，只做 roomId 校验和 coworker SSE 转发。
+- coworker 暴露 `/drawless/rooms/:roomId/coworker/conversation/stream`，调用 Mastra agent 的 `stream()`，把 Mastra 官方 stream chunk 直接包成 SSE。
+- web 直接展示 Mastra raw chunk；仅当 chunk 是 `text-delta` 时额外把文本增量追加到 coworker 正文。
 - agent 判断问题需要画布事实时调用 `collect-canvas-context`；上下文从 coworker 已同步的 tldraw store 派生，web 不再提交第二套画布摘要。
+- conversation chat 展示的是可审计执行轨迹，不展示模型隐藏推理链。
 
 这个阶段要求 coworker 已经以协作者身份进入 room；tldraw document 仍然是唯一画布事实源。
 
