@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "next build",
+    "build": "pnpm --filter @drawless/shared build && next build",
     "dev": "NEXT_PUBLIC_DRAWLESS_SYNC_SERVER_URL=http://127.0.0.1:3001 next dev --hostname 127.0.0.1",
     "start": "next start",
     "test:unit": "vitest run src/lib/_spec",

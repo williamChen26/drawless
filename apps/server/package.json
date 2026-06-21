@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "pnpm --filter @drawless/shared build && tsc -p tsconfig.build.json",
     "dev": "pnpm run build && node dist/src/main.js",
     "smoke": "pnpm run build && node dist/src/scripts/smoke-sync-server.js",
     "smoke:coworker-control": "pnpm run build && node dist/src/scripts/smoke-coworker-control.js",
