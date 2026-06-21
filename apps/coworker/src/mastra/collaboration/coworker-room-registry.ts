@@ -1,9 +1,14 @@
 import {
+  canvasEditRequestSchema,
   canvasContextRequestSchema,
+  coworkerConversationToolApprovalRequestSchema,
   coworkerConversationStreamRequestSchema,
   parseDrawlessRoomId,
+  type DrawlessCanvasEditRequest,
+  type DrawlessCanvasEditResult,
   type DrawlessCanvasContextRequest,
   type DrawlessCanvasContextSnapshot,
+  type DrawlessCoworkerConversationToolApprovalRequest,
   type DrawlessCoworkerConversationStreamRequest,
   type DrawlessCoworkerRoomSessionStatus,
   type DrawlessCoworkerRoomSnapshotSummary,
@@ -24,6 +29,7 @@ import {
   createCanvasContextSnapshot,
   createUnavailableCanvasContextSnapshot,
 } from '../tools/canvas-context-reader';
+import { createUnavailableCanvasEditResult } from '../tools/canvas-edit-executor';
 
 type CoworkerRoomEntry = {
   /** 当前 room 对应的 coworker sync client。 */
@@ -165,6 +171,36 @@ export class DrawlessCoworkerRoomRegistry {
     });
   }
 
+  async applyCanvasEdit(requestInput: DrawlessCanvasEditRequest): Promise<DrawlessCanvasEditResult> {
+    const request = canvasEditRequestSchema.parse(requestInput);
+    const roomId = parseRoomIdOrThrow(request.roomId);
+    const entry = this.entries.get(roomId);
+    if (!entry || !entry.client) {
+      return createUnavailableCanvasEditResult({
+        roomId,
+        reason: 'coworker 尚未进入这个 room，无法写入画布。',
+      });
+    }
+    if (entry.status !== 'online') {
+      return createUnavailableCanvasEditResult({
+        roomId,
+        reason: `coworker room client 当前状态为 ${entry.status}，尚未在线，无法写入画布。`,
+      });
+    }
+
+    const result = await entry.client.applyCanvasEdit(request);
+    if (result.applied) {
+      entry.snapshot = entry.client.getSnapshot();
+      entry.recentlyChangedRecordIds = mergeRecentRecordIds(
+        [...result.createdRecordIds, ...result.updatedRecordIds, ...result.deletedRecordIds],
+        entry.recentlyChangedRecordIds
+      );
+      entry.updatedAt = new Date().toISOString();
+    }
+
+    return result;
+  }
+
   async streamConversation(
     requestInput: DrawlessCoworkerConversationStreamRequest,
     options: { abortSignal?: AbortSignal | undefined } = {}
@@ -173,13 +209,37 @@ export class DrawlessCoworkerRoomRegistry {
     const roomId = parseRoomIdOrThrow(request.roomId);
 
     return this.cursorChatReplyAgent.stream(createConversationPrompt(request), {
-      activeTools: ['collect-canvas-context'],
+      activeTools: ['collect-canvas-context', 'edit-canvas'],
       maxSteps: 6,
       abortSignal: options.abortSignal,
       memory: {
         resource: roomId,
         thread: `${roomId}:conversation`,
       },
+    });
+  }
+
+  async approveConversationToolCall(
+    roomIdInput: string,
+    requestInput: DrawlessCoworkerConversationToolApprovalRequest
+  ) {
+    parseRoomIdOrThrow(roomIdInput);
+    const request = coworkerConversationToolApprovalRequestSchema.parse(requestInput);
+    return this.cursorChatReplyAgent.approveToolCall({
+      runId: request.runId,
+      toolCallId: request.toolCallId,
+    });
+  }
+
+  async declineConversationToolCall(
+    roomIdInput: string,
+    requestInput: DrawlessCoworkerConversationToolApprovalRequest
+  ) {
+    parseRoomIdOrThrow(roomIdInput);
+    const request = coworkerConversationToolApprovalRequestSchema.parse(requestInput);
+    return this.cursorChatReplyAgent.declineToolCall({
+      runId: request.runId,
+      toolCallId: request.toolCallId,
     });
   }
 
@@ -266,11 +326,25 @@ export class DrawlessCoworkerRoomRegistry {
 }
 
 function createConversationPrompt(request: DrawlessCoworkerConversationStreamRequest) {
+  const viewportLines = request.viewport
+    ? [
+        `用户当前可视 page：${request.viewport.currentPageId ?? '未知'}`,
+        `用户当前可视区 bounds：x=${Math.round(request.viewport.viewportBounds.x)}, y=${Math.round(request.viewport.viewportBounds.y)}, w=${Math.round(request.viewport.viewportBounds.w)}, h=${Math.round(request.viewport.viewportBounds.h)}`,
+        `用户当前可视区中心：x=${Math.round(request.viewport.viewportCenter.x)}, y=${Math.round(request.viewport.viewportCenter.y)}, zoom=${Number(request.viewport.zoom.toFixed(3))}`,
+        '调用 edit-canvas 创建新对象时，currentPageId 优先使用用户当前可视 page；没有明确目标位置时，把对象放在用户当前可视区中心附近，避免画到用户看不到的位置。',
+      ]
+    : ['本次 conversation 没有收到用户可视区上下文；创建对象前优先调用 collect-canvas-context，并尽量围绕已有对象或当前 page 布局。'];
+
   return [
     '你正在 drawless 的 tldraw 画布里，以 coworker 身份通过 conversation chat 和用户长对话。',
     '这是长对话通道，不是 cursor chat。你可以给完整分析、步骤、建议和需要确认的问题。',
     '当用户问题涉及当前画布内容、选区、结构、连线、frame/group、最近变化或“这里/这个”时，先调用 collect-canvas-context。',
-    '当前阶段你只能只读观察和回复，不要声称已经修改画布，也不要输出已执行画布操作。',
+    '当用户明确要求你在画布上创建、移动、改文字、调整尺寸或连线时，可以调用 edit-canvas；这个工具会等待用户确认后才真正写入画布。',
+    'edit-canvas 的 operations 必须是小步、明确、可审核的计划；不要一次性生成大量对象。',
+    'edit-canvas 默认使用 performed 执行节奏，coworker 会像真实协作者一样移动光标并分步写入；只有用户要求快速批量处理时才设置 executionMode 为 instant。',
+    '创建连线时，优先用 create_arrow 的 startBinding / endBinding 绑定 shape；连接同一次请求里刚创建的 shape 时，用 create_shape 的 operationId 作为 binding target。',
+    'edit-canvas 返回结果前，不要声称已经修改画布；如果工具返回 warnings，要如实告知。',
+    ...viewportLines,
     '',
     `房间：${request.roomId}`,
     `用户 conversation chat：${request.message}`,

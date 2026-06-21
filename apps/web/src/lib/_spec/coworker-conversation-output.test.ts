@@ -21,6 +21,8 @@ describe("coworker conversation output processor", () => {
         type: "tool-call",
         label: "工具调用",
         detail: "collect-canvas-context",
+        runId: "run-1",
+        approval: null,
         raw: event
       },
       raw: event
@@ -82,6 +84,42 @@ describe("coworker conversation output processor", () => {
         type: "error",
         label: "流式错误",
         detail: "stream failed",
+        runId: null,
+        approval: null,
+        raw: event
+      },
+      raw: event
+    });
+  });
+
+  it("summarizes tool approval chunks with the pending tool call", () => {
+    const event = {
+      type: "tool-call-approval",
+      runId: "run-1",
+      payload: {
+        toolName: "edit-canvas",
+        toolCallId: "call-1",
+        args: {
+          roomId: "alpha",
+          intent: "画一个节点",
+          operations: []
+        }
+      }
+    };
+
+    expect(createCoworkerConversationOutput(event)).toEqual({
+      kind: "tool",
+      event: {
+        type: "tool-call-approval",
+        label: "等待确认",
+        detail: "edit-canvas",
+        runId: "run-1",
+        approval: {
+          runId: "run-1",
+          toolCallId: "call-1",
+          toolName: "edit-canvas",
+          args: event.payload.args
+        },
         raw: event
       },
       raw: event

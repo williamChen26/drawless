@@ -1,40 +1,49 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import type { DrawlessCanvasViewportContext } from "@drawless/shared";
 
 import {
   createCoworkerConversationStream,
+  createCoworkerConversationToolApprovalStream,
   readCoworkerConversationEventStream,
   type CoworkerConversationStreamError
 } from "@/lib/coworker-conversation";
 import {
   createCoworkerConversationOutput,
-  type CoworkerConversationEventSummary
+  type CoworkerConversationEventSummary,
+  type CoworkerConversationToolApproval
 } from "@/lib/coworker-conversation-output";
+import {
+  appendCoworkerConversationEventBlock,
+  appendCoworkerConversationTextBlock,
+  getCoworkerConversationPendingApproval,
+  hasCoworkerConversationApproval,
+  type CoworkerConversationTimelineBlock
+} from "@/lib/coworker-conversation-timeline";
 
 type ConversationTurn = {
   /** 本地渲染用 ID，不作为跨端消息事实源。 */
   id: string;
   /** 用户在这一轮发送的文本。 */
   userText: string;
-  /** coworker 在这一轮内按 text-delta 增量拼接出的回复。 */
-  coworkerText: string;
+  /** 当前 Mastra run ID；用于 approval 续流。 */
+  runId: string | null;
   /** 这一轮回复的流式状态。 */
   status: ConversationStatus;
-  /** 非正文 event 形成的增量补充信息。 */
-  events: ConversationEventEntry[];
+  /** coworker 回复按 SSE 到达顺序形成的串行内容块。 */
+  blocks: CoworkerConversationTimelineBlock[];
 };
 
-type ConversationEventEntry = {
-  /** 本地渲染用 ID，不作为跨端事件事实源。 */
-  id: string;
-  /** 当前 stream chunk 的展示摘要。 */
-  summary: CoworkerConversationEventSummary;
-};
+type ConversationStatus = "idle" | "streaming" | "awaiting_approval" | "done" | "error";
 
-type ConversationStatus = "idle" | "streaming" | "done" | "error";
-
-export function CoworkerConversationWindow({ roomId }: { roomId: string }) {
+export function CoworkerConversationWindow({
+  roomId,
+  getCanvasViewport
+}: {
+  roomId: string;
+  getCanvasViewport?: () => DrawlessCanvasViewportContext | null;
+}) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<ConversationTurn[]>([]);
@@ -58,14 +67,14 @@ export function CoworkerConversationWindow({ roomId }: { roomId: string }) {
   const close = () => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
-    setStatus((current) => (current === "streaming" ? "idle" : current));
+    setStatus((current) => (isConversationBusy(current) ? "idle" : current));
     setOpen(false);
   };
 
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextMessage = message.trim();
-    if (!nextMessage || status === "streaming") {
+    if (!nextMessage || isConversationBusy(status)) {
       return;
     }
 
@@ -80,9 +89,8 @@ export function CoworkerConversationWindow({ roomId }: { roomId: string }) {
       const result = await createCoworkerConversationStream({
         roomId,
         message: nextMessage,
-        serverUrl:
-          process.env.NEXT_PUBLIC_DRAWLESS_SERVER_URL ??
-          process.env.NEXT_PUBLIC_DRAWLESS_SYNC_SERVER_URL,
+        viewport: getCanvasViewport?.() ?? null,
+        serverUrl: getCoworkerServerUrl(),
         signal: abortController.signal
       });
 
@@ -93,20 +101,9 @@ export function CoworkerConversationWindow({ roomId }: { roomId: string }) {
         return;
       }
 
-      let streamFailed = false;
-      await readCoworkerConversationEventStream(result.stream, (event) => {
-        const output = createCoworkerConversationOutput(event);
-        if (output.kind === "text-delta" && output.text) {
-          appendTextToTurn(turn.id, output.text);
-        } else {
-          appendEventToTurn(turn.id, output.event);
-          if (output.event.type === "error") {
-            streamFailed = true;
-          }
-        }
-      });
-      setTurnStatus(turn.id, streamFailed ? "error" : "done");
-      setStatus(streamFailed ? "error" : "done");
+      const nextStatus = await readStreamIntoTurn(turn.id, result.stream);
+      setTurnStatus(turn.id, nextStatus);
+      setStatus(nextStatus);
     } catch (error) {
       if (abortController.signal.aborted) {
         appendTextToTurn(turn.id, "\n[stream aborted]");
@@ -128,11 +125,111 @@ export function CoworkerConversationWindow({ roomId }: { roomId: string }) {
     }
   };
 
+  const resolveToolApproval = async (
+    turn: ConversationTurn,
+    approval: CoworkerConversationToolApproval,
+    decision: "approve" | "decline"
+  ) => {
+    const runId = approval.runId ?? turn.runId;
+    if (!runId) {
+      appendTextToTurn(turn.id, "\n[missing runId for tool approval]");
+      setTurnStatus(turn.id, "error");
+      setStatus("error");
+      return;
+    }
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    setTurnStatus(turn.id, "streaming");
+    setStatus("streaming");
+
+    try {
+      const result = await createCoworkerConversationToolApprovalStream({
+        roomId,
+        runId,
+        toolCallId: approval.toolCallId,
+        decision,
+        serverUrl: getCoworkerServerUrl(),
+        signal: abortController.signal
+      });
+
+      if (!result.ok) {
+        appendTextToTurn(turn.id, formatStreamError(result.error));
+        setTurnStatus(turn.id, "error");
+        setStatus("error");
+        return;
+      }
+
+      const nextStatus = await readStreamIntoTurn(turn.id, result.stream);
+      setTurnStatus(turn.id, nextStatus);
+      setStatus(nextStatus);
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        appendTextToTurn(turn.id, "\n[stream aborted]");
+        setTurnStatus(turn.id, "idle");
+        setStatus("idle");
+        return;
+      }
+
+      appendTextToTurn(
+        turn.id,
+        error instanceof Error ? error.message : String(error)
+      );
+      setTurnStatus(turn.id, "error");
+      setStatus("error");
+    } finally {
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null;
+      }
+    }
+  };
+
+  const readStreamIntoTurn = async (
+    turnId: string,
+    stream: ReadableStream<Uint8Array>
+  ): Promise<ConversationStatus> => {
+    let streamFailed = false;
+    let awaitingApproval = false;
+
+    await readCoworkerConversationEventStream(stream, (event) => {
+      const output = createCoworkerConversationOutput(event);
+      if (output.event.runId) {
+        setTurnRunId(turnId, output.event.runId);
+      }
+      if (output.kind === "text-delta" && output.text) {
+        appendTextToTurn(turnId, output.text);
+      } else {
+        appendEventToTurn(turnId, output.event);
+        if (output.event.type === "error") {
+          streamFailed = true;
+        }
+        if (output.event.approval) {
+          awaitingApproval = true;
+        }
+      }
+    });
+
+    if (streamFailed) {
+      return "error";
+    }
+    if (awaitingApproval) {
+      return "awaiting_approval";
+    }
+    return "done";
+  };
+
   const appendTextToTurn = (turnId: string, chunk: string) => {
     setTurns((current) =>
       current.map((turn) =>
         turn.id === turnId
-          ? { ...turn, coworkerText: `${turn.coworkerText}${chunk}` }
+          ? {
+              ...turn,
+              blocks: appendCoworkerConversationTextBlock(
+                turn.blocks,
+                chunk,
+                createLocalId
+              )
+            }
           : turn
       )
     );
@@ -147,7 +244,11 @@ export function CoworkerConversationWindow({ roomId }: { roomId: string }) {
         turn.id === turnId
           ? {
               ...turn,
-              events: [...turn.events, { id: createLocalId(), summary }]
+              blocks: appendCoworkerConversationEventBlock(
+                turn.blocks,
+                summary,
+                createLocalId
+              )
             }
           : turn
       )
@@ -158,6 +259,14 @@ export function CoworkerConversationWindow({ roomId }: { roomId: string }) {
     setTurns((current) =>
       current.map((turn) =>
         turn.id === turnId ? { ...turn, status: nextStatus } : turn
+      )
+    );
+  };
+
+  const setTurnRunId = (turnId: string, runId: string) => {
+    setTurns((current) =>
+      current.map((turn) =>
+        turn.id === turnId ? { ...turn, runId } : turn
       )
     );
   };
@@ -189,53 +298,117 @@ export function CoworkerConversationWindow({ roomId }: { roomId: string }) {
             {JSON.stringify({ roomId, status: "ready" }, null, 2)}
           </pre>
         ) : (
-          turns.map((turn) => (
-            <section
-              className="coworker-conversation__turn"
-              data-status={turn.status}
-              key={turn.id}
-            >
-              <article className="coworker-conversation__message" data-role="user">
-                <strong>user</strong>
-                <pre>{turn.userText}</pre>
-              </article>
-              <article className="coworker-conversation__message" data-role="coworker">
-                <strong>coworker</strong>
-                <pre>
-                  {turn.coworkerText || getCoworkerPlaceholder(turn.status)}
-                </pre>
-              </article>
-              {turn.events.length > 0 ? (
-                <details className="coworker-conversation__events">
-                  <summary>events {turn.events.length}</summary>
-                  <ol>
-                    {turn.events.map((event) => (
-                      <li key={event.id}>
-                        <span>{event.summary.label}</span>
-                        <code>{event.summary.type}</code>
-                        {event.summary.detail ? (
-                          <small>{event.summary.detail}</small>
-                        ) : null}
-                        <pre>{formatRawStreamEvent(event.summary.raw)}</pre>
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-              ) : null}
-            </section>
-          ))
+          turns.map((turn) => {
+            const pendingApproval = getPendingApproval(turn);
+            return (
+              <section
+                className="coworker-conversation__turn"
+                data-status={turn.status}
+                key={turn.id}
+              >
+                <article className="coworker-conversation__message" data-role="user">
+                  <strong>user</strong>
+                  <pre>{turn.userText}</pre>
+                </article>
+                <div className="coworker-conversation__timeline">
+                  {turn.blocks.length === 0 ? (
+                    <article
+                      className="coworker-conversation__message"
+                      data-role="coworker"
+                    >
+                      <strong>coworker</strong>
+                      <pre>{getCoworkerPlaceholder(turn.status)}</pre>
+                    </article>
+                  ) : (
+                    turn.blocks.map((block) =>
+                      block.kind === "text" ? (
+                        <article
+                          className="coworker-conversation__message"
+                          data-role="coworker"
+                          key={block.id}
+                        >
+                          <strong>coworker</strong>
+                          <pre>{block.text}</pre>
+                        </article>
+                      ) : (
+                        <section
+                          className="coworker-conversation__event-block"
+                          key={block.id}
+                        >
+                          <details className="coworker-conversation__events">
+                            <summary>events {block.events.length}</summary>
+                            <ol>
+                              {block.events.map((event) => (
+                                <li key={event.id}>
+                                  <span>{event.summary.label}</span>
+                                  <code>{event.summary.type}</code>
+                                  {event.summary.detail ? (
+                                    <small>{event.summary.detail}</small>
+                                  ) : null}
+                                  <pre>{formatRawStreamEvent(event.summary.raw)}</pre>
+                                </li>
+                              ))}
+                            </ol>
+                          </details>
+                          {turn.status === "awaiting_approval" &&
+                          pendingApproval &&
+                          hasCoworkerConversationApproval(
+                            block,
+                            pendingApproval
+                          ) ? (
+                            <div className="coworker-conversation__approval-panel">
+                              <strong>等待确认</strong>
+                              <small>{pendingApproval.toolName ?? "tool call"}</small>
+                              <div className="coworker-conversation__approval">
+                                <button
+                                  type="button"
+                                  disabled={status === "streaming"}
+                                  onClick={() =>
+                                    resolveToolApproval(
+                                      turn,
+                                      pendingApproval,
+                                      "approve"
+                                    )
+                                  }
+                                >
+                                  确认执行
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={status === "streaming"}
+                                  onClick={() =>
+                                    resolveToolApproval(
+                                      turn,
+                                      pendingApproval,
+                                      "decline"
+                                    )
+                                  }
+                                >
+                                  拒绝
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </section>
+                      )
+                    )
+                  )}
+                </div>
+              </section>
+            );
+          })
         )}
       </div>
       <form className="coworker-conversation__form" onSubmit={sendMessage}>
         <textarea
           aria-label="Conversation message"
-          disabled={status === "streaming"}
+          disabled={isConversationBusy(status)}
           onChange={(event) => setMessage(event.target.value)}
           placeholder="输入要让 coworker 长回复的问题"
           rows={3}
           value={message}
         />
-        <button type="submit" disabled={!message.trim() || status === "streaming"}>
+        <button type="submit" disabled={!message.trim() || isConversationBusy(status)}>
           {status === "streaming" ? "输出中" : "发送"}
         </button>
       </form>
@@ -247,9 +420,9 @@ function createConversationTurn(userText: string): ConversationTurn {
   return {
     id: createLocalId(),
     userText,
-    coworkerText: "",
+    runId: null,
     status: "streaming",
-    events: []
+    blocks: []
   };
 }
 
@@ -273,12 +446,32 @@ function formatRawStreamEvent(event: unknown) {
   return JSON.stringify(event, null, 2);
 }
 
+function getPendingApproval(
+  turn: ConversationTurn
+): CoworkerConversationToolApproval | null {
+  return getCoworkerConversationPendingApproval(turn.blocks);
+}
+
 function getCoworkerPlaceholder(status: ConversationStatus) {
   if (status === "streaming") {
     return "[waiting for stream]";
+  }
+  if (status === "awaiting_approval") {
+    return "[waiting for approval]";
   }
   if (status === "error") {
     return "[stream error]";
   }
   return "";
+}
+
+function getCoworkerServerUrl() {
+  return (
+    process.env.NEXT_PUBLIC_DRAWLESS_SERVER_URL ??
+    process.env.NEXT_PUBLIC_DRAWLESS_SYNC_SERVER_URL
+  );
+}
+
+function isConversationBusy(status: ConversationStatus) {
+  return status === "streaming" || status === "awaiting_approval";
 }

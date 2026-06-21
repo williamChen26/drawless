@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSync } from "@tldraw/sync";
-import { inlineBase64AssetStore, Tldraw } from "tldraw";
+import { inlineBase64AssetStore, Tldraw, type Editor } from "tldraw";
+import type { DrawlessCanvasViewportContext } from "@drawless/shared";
 
 import {
   CanvasShellFrame,
@@ -76,6 +77,7 @@ function SyncedCanvasShell({
   });
   const share = useRoomShare(collaboration.roomId);
   const coworker = useCoworkerControl(collaboration.roomId);
+  const editorRef = useRef<Editor | null>(null);
 
   if (statusView.state === "connecting") {
     return (
@@ -118,11 +120,44 @@ function SyncedCanvasShell({
       coworker={coworker}
     >
       <div className="canvas-shell__editor" data-testid="tldraw-host">
-        <Tldraw store={store} />
-        <CoworkerConversationWindow roomId={collaboration.roomId} />
+        <Tldraw
+          store={store}
+          onMount={(editor) => {
+            editorRef.current = editor;
+          }}
+        />
+        <CoworkerConversationWindow
+          roomId={collaboration.roomId}
+          getCanvasViewport={() => createCanvasViewportContext(editorRef.current)}
+        />
       </div>
     </CanvasShellFrame>
   );
+}
+
+function createCanvasViewportContext(
+  editor: Editor | null
+): DrawlessCanvasViewportContext | null {
+  if (!editor) {
+    return null;
+  }
+
+  const bounds = editor.getViewportPageBounds();
+  const camera = editor.getCamera();
+  return {
+    currentPageId: editor.getCurrentPageId(),
+    viewportBounds: {
+      x: bounds.x,
+      y: bounds.y,
+      w: bounds.w,
+      h: bounds.h
+    },
+    viewportCenter: {
+      x: bounds.x + bounds.w / 2,
+      y: bounds.y + bounds.h / 2
+    },
+    zoom: camera.z
+  };
 }
 
 function createCollaborationStatusView(input: {

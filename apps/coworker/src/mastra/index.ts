@@ -9,6 +9,7 @@ import { drawlessCoworker } from './agents/drawless-coworker';
 import { DrawlessCoworkerRoomRegistry } from './collaboration/coworker-room-registry';
 import { createCoworkerRoomApiRoutes } from './routes/coworker-room-routes';
 import { setCanvasContextCollector } from './tools/canvas-context-tool';
+import { setCanvasEditExecutor } from './tools/canvas-edit-tool';
 
 export const mastra = new Mastra({
   agents: { drawlessCoworker },
@@ -45,6 +46,7 @@ export const mastra = new Mastra({
 const registeredDrawlessCoworker = mastra.getAgentById('drawless-coworker');
 const coworkerRoomRegistry = new DrawlessCoworkerRoomRegistry(registeredDrawlessCoworker);
 setCanvasContextCollector((request) => coworkerRoomRegistry.collectCanvasContext(request));
+setCanvasEditExecutor((request) => coworkerRoomRegistry.applyCanvasEdit(request));
 
 mastra.setServer({
   apiRoutes: createCoworkerRoomApiRoutes(coworkerRoomRegistry),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  DrawlessCoworkerConversationToolApprovalRequest,
   DrawlessCoworkerRoomStatusResponse,
   DrawlessServerCoworkerStartRequest
 } from "@drawless/shared";
@@ -82,9 +83,18 @@ describe("server app", () => {
 
   it("forwards coworker lifecycle requests through the configured client", async () => {
     const calls: Array<{
-      method: "start" | "status" | "stop" | "streamConversation";
+      method:
+        | "start"
+        | "status"
+        | "stop"
+        | "streamConversation"
+        | "approveConversationToolCall"
+        | "declineConversationToolCall";
       roomId: string;
-      request?: DrawlessServerCoworkerStartRequest | { roomId: string; message: string };
+      request?:
+        | DrawlessServerCoworkerStartRequest
+        | { roomId: string; message: string }
+        | DrawlessCoworkerConversationToolApprovalRequest;
     }> = [];
     const status: DrawlessCoworkerRoomStatusResponse = {
       roomId: "alpha",
@@ -116,6 +126,18 @@ describe("server app", () => {
       streamConversation: async (roomId, request) => {
         calls.push({ method: "streamConversation", roomId, request });
         return new Response("hello from coworker", {
+          headers: { "content-type": "text/event-stream; charset=utf-8" }
+        });
+      },
+      approveConversationToolCall: async (roomId, request) => {
+        calls.push({ method: "approveConversationToolCall", roomId, request });
+        return new Response("approved", {
+          headers: { "content-type": "text/event-stream; charset=utf-8" }
+        });
+      },
+      declineConversationToolCall: async (roomId, request) => {
+        calls.push({ method: "declineConversationToolCall", roomId, request });
+        return new Response("declined", {
           headers: { "content-type": "text/event-stream; charset=utf-8" }
         });
       }
@@ -158,6 +180,20 @@ describe("server app", () => {
     expect(conversation.headers["content-type"]).toContain("text/event-stream");
     expect(conversation.body).toBe("hello from coworker");
 
+    const approve = await app.inject({
+      method: "POST",
+      url: "/rooms/alpha/coworker/conversation/run-1/tool-calls/call-1/approve"
+    });
+    expect(approve.statusCode).toBe(200);
+    expect(approve.body).toBe("approved");
+
+    const decline = await app.inject({
+      method: "POST",
+      url: "/rooms/alpha/coworker/conversation/run-1/tool-calls/call-1/decline"
+    });
+    expect(decline.statusCode).toBe(200);
+    expect(decline.body).toBe("declined");
+
     expect(calls).toEqual([
       {
         method: "start",
@@ -166,12 +202,83 @@ describe("server app", () => {
       },
       { method: "status", roomId: "alpha" },
       { method: "stop", roomId: "alpha" },
+      { method: "status", roomId: "alpha" },
       {
         method: "streamConversation",
         roomId: "alpha",
         request: { roomId: "alpha", message: "帮我看看画布。" }
+      },
+      {
+        method: "approveConversationToolCall",
+        roomId: "alpha",
+        request: { runId: "run-1", toolCallId: "call-1" }
+      },
+      {
+        method: "declineConversationToolCall",
+        roomId: "alpha",
+        request: { runId: "run-1", toolCallId: "call-1" }
       }
     ]);
+
+    await app.close();
+  });
+
+  it("waits for coworker to be online before streaming conversation", async () => {
+    const calls: string[] = [];
+    const startingStatus: DrawlessCoworkerRoomStatusResponse = {
+      roomId: "alpha",
+      active: true,
+      status: "starting",
+      identity: null,
+      snapshot: null,
+      lastError: null,
+      startedAt: "2026-06-11T00:00:00.000Z",
+      updatedAt: "2026-06-11T00:00:00.000Z"
+    };
+    const onlineStatus: DrawlessCoworkerRoomStatusResponse = {
+      ...startingStatus,
+      status: "online"
+    };
+    const coworkerClient: CoworkerControlClient = {
+      status: async () => {
+        calls.push("status");
+        return startingStatus;
+      },
+      start: async (_roomId, request) => {
+        calls.push(`start:${request.waitUntilLoaded}:${request.timeoutMs}`);
+        return onlineStatus;
+      },
+      stop: async (roomId) => ({
+        roomId,
+        stopped: true,
+        status: "stopped"
+      }),
+      streamConversation: async () => {
+        calls.push("streamConversation");
+        return new Response("stream", {
+          headers: { "content-type": "text/event-stream; charset=utf-8" }
+        });
+      },
+      approveConversationToolCall: async () => new Response("approved"),
+      declineConversationToolCall: async () => new Response("declined")
+    };
+    const { app } = await createServerApp({
+      config: loadServerConfig({
+        ALLOWED_ORIGINS: "http://127.0.0.1:3000",
+        COWORKER_ENABLED: "true"
+      }),
+      coworkerClient
+    });
+
+    const conversation = await app.inject({
+      method: "POST",
+      url: "/rooms/alpha/coworker/conversation/stream",
+      payload: { message: "画一个矩形" }
+    });
+
+    expect(conversation.statusCode).toBe(200);
+    expect(conversation.body).toBe("stream");
+    expect(calls).toEqual(["status", "start:true:8000", "streamConversation"]);
 
     await app.close();
   });

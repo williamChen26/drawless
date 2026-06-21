@@ -1,8 +1,10 @@
 import {
+  coworkerConversationToolApprovalRequestSchema,
   coworkerRoomStatusResponseSchema,
   coworkerStopResponseSchema,
   coworkerConversationStreamRequestSchema,
   type DrawlessCoworkerControlConfig,
+  type DrawlessCoworkerConversationToolApprovalRequest,
   type DrawlessCoworkerConversationStreamRequest,
   type DrawlessCoworkerRoomStatusResponse,
   type DrawlessCoworkerStartRequest,
@@ -25,6 +27,16 @@ export interface CoworkerControlClient {
   streamConversation(
     roomId: DrawlessRoomId,
     request: DrawlessCoworkerConversationStreamRequest
+  ): Promise<Response>;
+  /** 确认 conversation stream 中等待审批的 tool call，并返回续流响应。 */
+  approveConversationToolCall(
+    roomId: DrawlessRoomId,
+    request: DrawlessCoworkerConversationToolApprovalRequest
+  ): Promise<Response>;
+  /** 拒绝 conversation stream 中等待审批的 tool call，并返回续流响应。 */
+  declineConversationToolCall(
+    roomId: DrawlessRoomId,
+    request: DrawlessCoworkerConversationToolApprovalRequest
   ): Promise<Response>;
 }
 
@@ -96,6 +108,24 @@ export function createCoworkerControlClient(
         action: "conversation/stream",
         body
       });
+    },
+    approveConversationToolCall: async (roomId, request) => {
+      const body = coworkerConversationToolApprovalRequestSchema.parse(request);
+      return sendCoworkerStreamRequest({
+        config,
+        roomId,
+        action: createConversationToolApprovalAction(body, "approve"),
+        body
+      });
+    },
+    declineConversationToolCall: async (roomId, request) => {
+      const body = coworkerConversationToolApprovalRequestSchema.parse(request);
+      return sendCoworkerStreamRequest({
+        config,
+        roomId,
+        action: createConversationToolApprovalAction(body, "decline"),
+        body
+      });
     }
   };
 }
@@ -106,9 +136,11 @@ async function sendCoworkerStreamRequest(input: {
   /** 要对话的协同房间 ID。 */
   roomId: DrawlessRoomId;
   /** coworker custom API 的流式动作名称。 */
-  action: "conversation/stream";
+  action: string;
   /** POST 请求体。 */
-  body: DrawlessCoworkerConversationStreamRequest;
+  body:
+    | DrawlessCoworkerConversationStreamRequest
+    | DrawlessCoworkerConversationToolApprovalRequest;
 }) {
   if (!input.config.baseUrl) {
     throw new CoworkerControlClientError("Coworker control base url is not configured.", 503);
@@ -207,7 +239,7 @@ async function sendCoworkerRequest(input: {
 function createCoworkerUrl(input: {
   config: DrawlessCoworkerControlConfig;
   roomId: DrawlessRoomId;
-  action: "start" | "status" | "stop" | "conversation/stream";
+  action: string;
 }) {
   const url = new URL(input.config.baseUrl ?? "http://127.0.0.1");
   // coworker custom API 不挂在 Mastra 默认 /api 前缀下，而是直接注册在 root path。
@@ -221,6 +253,19 @@ function createCoworkerUrl(input: {
   );
 
   return url.toString();
+}
+
+function createConversationToolApprovalAction(
+  request: DrawlessCoworkerConversationToolApprovalRequest,
+  decision: "approve" | "decline"
+) {
+  return joinUrlPath(
+    "conversation",
+    encodeURIComponent(request.runId),
+    "tool-calls",
+    encodeURIComponent(request.toolCallId),
+    decision
+  ).slice(1);
 }
 
 async function readJson(response: Response) {

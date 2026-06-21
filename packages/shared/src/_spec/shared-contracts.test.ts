@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canvasEditRequestSchema,
+  canvasEditResultSchema,
   canvasContextRequestSchema,
   canvasContextSnapshotSchema,
   canvasSemanticGraphSchema,
   canvasSummarySchema,
+  coworkerConversationToolApprovalRequestSchema,
   coworkerConversationStreamRequestSchema,
   coworkerControlConfigSchema,
   coworkerIdentitySchema,
@@ -297,19 +300,116 @@ describe("drawless shared contracts", () => {
     expect(context.semanticGraph?.nodes[0]?.text).toBe("项目目标");
   });
 
+  it("validates bounded canvas edit contracts", () => {
+    const request = canvasEditRequestSchema.parse({
+      roomId: "alpha",
+      currentPageId: "page:page",
+      intent: "画一个三步流程",
+      operations: [
+        {
+          operationId: "op-1",
+          kind: "create_shape",
+          shapeKind: "rectangle",
+          text: "开始",
+          bounds: { x: 0, y: 0, w: 140, h: 80 },
+          style: { color: "blue", fill: "semi", size: "m" }
+        },
+        {
+          operationId: "op-2",
+          kind: "create_arrow",
+          from: { x: 140, y: 40 },
+          to: { x: 240, y: 40 },
+          startBinding: {
+            operationId: "op-1",
+            normalizedAnchor: { x: 1, y: 0.5 },
+            snap: "edge"
+          },
+          endBinding: {
+            shapeId: "shape:target",
+            normalizedAnchor: { x: 0, y: 0.5 }
+          }
+        }
+      ]
+    });
+
+    expect(request.executionMode).toBe("performed");
+    expect(request.operations).toHaveLength(2);
+    expect(request.operations[1]).toMatchObject({
+      kind: "create_arrow",
+      startBinding: {
+        operationId: "op-1",
+        snap: "edge"
+      }
+    });
+    expect(
+      canvasEditRequestSchema.safeParse({
+        ...request,
+        operations: [
+          {
+            operationId: "op-bad",
+            kind: "create_shape",
+            shapeKind: "star",
+            bounds: { x: 0, y: 0, w: 100, h: 60 }
+          }
+        ]
+      }).success
+    ).toBe(false);
+    expect(
+      canvasEditRequestSchema.safeParse({
+        ...request,
+        executionMode: "instant",
+        operations: [
+          {
+            operationId: "op-bad-binding",
+            kind: "create_arrow",
+            from: { x: 0, y: 0 },
+            to: { x: 100, y: 0 },
+            startBinding: { normalizedAnchor: { x: 0.5, y: 0.5 } }
+          }
+        ]
+      }).success
+    ).toBe(false);
+
+    expect(
+      canvasEditResultSchema.parse({
+        roomId: "alpha",
+        applied: true,
+        createdRecordIds: ["shape:one"],
+        updatedRecordIds: [],
+        deletedRecordIds: [],
+        warnings: [],
+        summary: "coworker 已写入画布。"
+      })
+    ).toMatchObject({ applied: true });
+  });
+
   it("validates coworker conversation stream requests", () => {
     const request = coworkerConversationStreamRequestSchema.parse({
       roomId: "alpha",
-      message: "帮我看看这个画布现在缺什么？"
+      message: "帮我看看这个画布现在缺什么？",
+      viewport: {
+        currentPageId: "page:page",
+        viewportBounds: { x: -200, y: -100, w: 800, h: 600 },
+        viewportCenter: { x: 200, y: 200 },
+        zoom: 1
+      }
     });
 
     expect(request.roomId).toBe("alpha");
+    expect(request.viewport?.viewportCenter).toEqual({ x: 200, y: 200 });
     expect(
       coworkerConversationStreamRequestSchema.safeParse({
         roomId: "alpha",
         message: ""
       }).success
     ).toBe(false);
+
+    expect(
+      coworkerConversationToolApprovalRequestSchema.parse({
+        runId: "run-1",
+        toolCallId: "call-1"
+      })
+    ).toEqual({ runId: "run-1", toolCallId: "call-1" });
   });
 
 });

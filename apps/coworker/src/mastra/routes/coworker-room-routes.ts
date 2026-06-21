@@ -1,10 +1,12 @@
 import { registerApiRoute } from '@mastra/core/server';
 
 import {
+  coworkerConversationToolApprovalRequestSchema,
   coworkerConversationStreamRequestSchema,
   coworkerStartRequestSchema,
 } from '../../../../../packages/shared/src/index';
 import type { DrawlessCoworkerRoomRegistry } from '../collaboration/coworker-room-registry';
+import type { DrawlessAgentStreamOutput } from '../collaboration/cursor-chat-reply-handler';
 
 type TextStreamReader = {
   read(): Promise<{ value?: string; done: boolean }>;
@@ -18,7 +20,7 @@ type TextStreamLike = {
 type AgentStreamOutput = {
   textStream: TextStreamLike;
   fullStream?: AsyncIterable<unknown> | undefined;
-};
+} & Pick<DrawlessAgentStreamOutput, 'runId'>;
 
 // 这组 custom API routes 是 coworker 的控制面，只负责进入、查询、退出 room。
 // 画布读写仍然通过 coworker 自己的 tldraw sync client 走协同边界。
@@ -88,20 +90,84 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
           const result = await coworkerRoomRegistry.streamConversation(request.data, {
             abortSignal: c.req.raw.signal,
           });
-          return new Response(createConversationSseStream({
-            result,
-          }), {
-            headers: {
-              'content-type': 'text/event-stream; charset=utf-8',
-              'cache-control': 'no-cache',
-              connection: 'keep-alive',
-            },
-          });
+          return createConversationStreamResponse(result);
         } catch (error) {
           return c.json({ ok: false, error: toErrorMessage(error) }, 400);
         }
       },
     }),
+    registerApiRoute(
+      '/drawless/rooms/:roomId/coworker/conversation/:runId/tool-calls/:toolCallId/approve',
+      {
+        method: 'POST',
+        // 当前阶段用于本地 server/coworker 联调；生产环境需要换成 server 签名或内部鉴权。
+        requiresAuth: false,
+        handler: async (c) => {
+          const roomId = c.req.param('roomId');
+          const request = coworkerConversationToolApprovalRequestSchema.safeParse({
+            runId: c.req.param('runId'),
+            toolCallId: c.req.param('toolCallId'),
+          });
+          if (!request.success) {
+            return c.json(
+              {
+                ok: false,
+                error:
+                  request.error.issues[0]?.message ??
+                  'Invalid coworker conversation approval request.',
+              },
+              400
+            );
+          }
+
+          try {
+            const result = await coworkerRoomRegistry.approveConversationToolCall(
+              roomId,
+              request.data
+            );
+            return createConversationStreamResponse(result);
+          } catch (error) {
+            return c.json({ ok: false, error: toErrorMessage(error) }, 400);
+          }
+        },
+      }
+    ),
+    registerApiRoute(
+      '/drawless/rooms/:roomId/coworker/conversation/:runId/tool-calls/:toolCallId/decline',
+      {
+        method: 'POST',
+        // 当前阶段用于本地 server/coworker 联调；生产环境需要换成 server 签名或内部鉴权。
+        requiresAuth: false,
+        handler: async (c) => {
+          const roomId = c.req.param('roomId');
+          const request = coworkerConversationToolApprovalRequestSchema.safeParse({
+            runId: c.req.param('runId'),
+            toolCallId: c.req.param('toolCallId'),
+          });
+          if (!request.success) {
+            return c.json(
+              {
+                ok: false,
+                error:
+                  request.error.issues[0]?.message ??
+                  'Invalid coworker conversation approval request.',
+              },
+              400
+            );
+          }
+
+          try {
+            const result = await coworkerRoomRegistry.declineConversationToolCall(
+              roomId,
+              request.data
+            );
+            return createConversationStreamResponse(result);
+          } catch (error) {
+            return c.json({ ok: false, error: toErrorMessage(error) }, 400);
+          }
+        },
+      }
+    ),
     registerApiRoute('/drawless/rooms/:roomId/coworker/stop', {
       method: 'DELETE',
       // stop 会关闭 coworker 的 WebSocket client，用于释放 room 内的 AI 同事身份。
@@ -131,6 +197,16 @@ function toErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function createConversationStreamResponse(result: AgentStreamOutput) {
+  return new Response(createConversationSseStream({ result }), {
+    headers: {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+    },
+  });
+}
+
 function createConversationSseStream(input: {
   /** Mastra agent 返回的流式结果。 */
   result: AgentStreamOutput;
@@ -144,6 +220,12 @@ function createConversationSseStream(input: {
       };
 
       try {
+        if (input.result.runId) {
+          emit({
+            type: 'drawless-run',
+            runId: input.result.runId,
+          });
+        }
         if (input.result.fullStream) {
           for await (const chunk of input.result.fullStream) {
             emit(chunk);

@@ -12,6 +12,7 @@ import {
   type TLInstancePresence,
   type TLPageId,
   type TLRecord,
+  type TLShapeId,
   type TLStore,
 } from 'tldraw';
 import WebSocket from 'ws';
@@ -19,11 +20,19 @@ import WebSocket from 'ws';
 import {
   createDrawlessCoworkerSessionId,
   parseDrawlessRoomId,
+  type DrawlessCanvasEditRequest,
+  type DrawlessCanvasEditResult,
   type DrawlessCoworkerIdentity,
   type DrawlessCoworkerRoomSnapshotSummary,
   type DrawlessRoomId,
   type DrawlessSessionId,
 } from '../../../../../packages/shared/src/index';
+import {
+  applyCanvasEditToStore,
+  getCanvasEditExecutionMode,
+  performCanvasEditToStore,
+  type CanvasEditPresencePatch,
+} from '../tools/canvas-edit-executor';
 
 export type DrawlessCoworkerRoomClientOptions = {
   /** coworker 要进入的协同房间 ID。 */
@@ -78,6 +87,8 @@ export type DrawlessCoworkerRoomClient = {
   getSnapshot: () => DrawlessCoworkerRoomSnapshot;
   /** 通过 coworker presence 发送一条 cursor chat。 */
   sendCursorChat: (message: string, cursor?: { x: number; y: number }) => void;
+  /** 通过 coworker 本地 TLStore 应用受控画布编辑。 */
+  applyCanvasEdit: (request: DrawlessCanvasEditRequest) => Promise<DrawlessCanvasEditResult>;
   /** 关闭 sync client 和 WebSocket adapter。 */
   close: () => void;
 };
@@ -112,13 +123,15 @@ export function createDrawlessCoworkerRoomClient(
   const pendingCursorChatTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // coworker 自己发出的 cursor chat 也要自动清空，否则气泡会长时间停留在画布上。
   let clearCursorChatTimer: ReturnType<typeof setTimeout> | null = null;
+  // 写画布操作按 room 串行执行，避免两个 tool call 同时推动同一个 coworker 光标。
+  let editQueue: Promise<unknown> = Promise.resolve();
 
   installNodeRuntimeAdapters();
 
   const store = createTLStore({
     id: `drawless-coworker:${roomId}:${instanceId}`,
     collaboration: {
-      // collaboration 状态只反映连接状态；当前不会授权 coworker 直接写画布。
+      // 默认只读；真正执行 edit-canvas 工具时才会临时切到 readwrite。
       status: socketStatus,
       mode: collaborationMode,
     },
@@ -217,6 +230,39 @@ export function createDrawlessCoworkerRoomClient(
           clearCursorChatTimer = timer;
         },
       });
+    },
+    applyCanvasEdit: (request) => {
+      const runEdit = async () => {
+        const previousMode = collaborationMode.get();
+        collaborationMode.set('readwrite');
+        try {
+          const input = {
+            store,
+            request,
+            fallbackPageId: findCurrentPageId(store, identity.sessionId),
+            presence: {
+              updatePresence: (patch: CanvasEditPresencePatch) =>
+                updateCoworkerPresence({
+                  identity,
+                  localPresence: presence,
+                  patch,
+                }),
+            },
+          };
+
+          return getCanvasEditExecutionMode(request) === 'instant'
+            ? applyCanvasEditToStore(input)
+            : performCanvasEditToStore(input);
+        } finally {
+          collaborationMode.set(previousMode);
+        }
+      };
+      const result = editQueue.then(runEdit, runEdit);
+      editQueue = result.then(
+        () => undefined,
+        () => undefined
+      );
+      return result;
     },
     close: () => {
       unlistenStore();
@@ -333,6 +379,40 @@ function publishCoworkerCursorChat(input: {
   );
 }
 
+function updateCoworkerPresence(input: {
+  identity: DrawlessCoworkerIdentity;
+  localPresence: ReturnType<typeof atom<TLInstancePresence | null>>;
+  patch: CanvasEditPresencePatch;
+}) {
+  const currentPresence = input.localPresence.get();
+  if (!currentPresence || currentPresence.userId !== input.identity.sessionId) {
+    return;
+  }
+
+  input.localPresence.set({
+    ...currentPresence,
+    currentPageId: (input.patch.currentPageId ?? currentPresence.currentPageId) as TLPageId,
+    cursor:
+      input.patch.cursor === undefined
+        ? currentPresence.cursor
+        : input.patch.cursor
+          ? {
+              x: input.patch.cursor.x,
+              y: input.patch.cursor.y,
+              type: 'default',
+              rotation: 0,
+            }
+          : null,
+    selectedShapeIds:
+      input.patch.selectedShapeIds === undefined
+        ? currentPresence.selectedShapeIds
+        : input.patch.selectedShapeIds.map((shapeId) => shapeId as TLShapeId),
+    chatMessage:
+      input.patch.chatMessage === undefined ? currentPresence.chatMessage : input.patch.chatMessage,
+    lastActivityTimestamp: Date.now(),
+  });
+}
+
 function createCoworkerPresence(input: {
   identity: DrawlessCoworkerIdentity;
   store: TLStore;
@@ -374,9 +454,22 @@ function isRemotePresence(
   );
 }
 
-function findCurrentPageId(store: TLStore): TLPageId {
+function findCurrentPageId(store: TLStore, excludeSessionId?: DrawlessSessionId): TLPageId {
   // TLInstancePresence 必须带 currentPageId。Node 侧没有 Editor 实例，
   // 所以从 store records 中尽量推断当前 page。
+  const remotePresenceRecord = store.allRecords().find((record) => {
+    return (
+      record.typeName === 'instance_presence' &&
+      'userId' in record &&
+      record.userId !== excludeSessionId &&
+      'currentPageId' in record &&
+      typeof record.currentPageId === 'string'
+    );
+  });
+  if (remotePresenceRecord && 'currentPageId' in remotePresenceRecord) {
+    return remotePresenceRecord.currentPageId as TLPageId;
+  }
+
   const instanceRecord = store.allRecords().find((record) => record.id === 'instance:instance');
   if (
     instanceRecord &&

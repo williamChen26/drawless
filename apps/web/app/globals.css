@@ -173,7 +173,8 @@ select {
 }
 
 .coworker-conversation__header button,
-.coworker-conversation__form button {
+.coworker-conversation__form button,
+.coworker-conversation__approval button {
   min-width: 56px;
   height: 30px;
   border: 1px solid #ccc;
@@ -202,6 +203,11 @@ select {
   border-bottom: 1px solid #eee;
 }
 
+.coworker-conversation__timeline {
+  display: grid;
+  gap: 8px;
+}
+
 .coworker-conversation__message {
   display: grid;
   gap: 6px;
@@ -222,6 +228,11 @@ select {
   font-size: 12px;
 }
 
+.coworker-conversation__event-block {
+  display: grid;
+  gap: 6px;
+}
+
 .coworker-conversation__events ol {
   display: grid;
   gap: 8px;
@@ -237,6 +248,24 @@ select {
 .coworker-conversation__events code,
 .coworker-conversation__events small {
   overflow-wrap: anywhere;
+}
+
+.coworker-conversation__approval-panel {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  font-size: 12px;
+}
+
+.coworker-conversation__approval-panel small {
+  overflow-wrap: anywhere;
+}
+
+.coworker-conversation__approval {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .coworker-conversation__form {

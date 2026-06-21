@@ -17,10 +17,27 @@ export type DrawlessCursorChatReplyAgent = {
       maxSteps?: number;
       abortSignal?: AbortSignal;
     }
-  ) => Promise<{
-    textStream: ReadableStream<string>;
-    fullStream?: AsyncIterable<unknown> | undefined;
-  }>;
+  ) => Promise<DrawlessAgentStreamOutput>;
+  /** 用户确认需要审批的 tool call 后恢复 Mastra stream。 */
+  approveToolCall: (request: DrawlessToolApprovalResumeRequest) => Promise<DrawlessAgentStreamOutput>;
+  /** 用户拒绝需要审批的 tool call 后恢复 Mastra stream。 */
+  declineToolCall: (request: DrawlessToolApprovalResumeRequest) => Promise<DrawlessAgentStreamOutput>;
+};
+
+export type DrawlessAgentStreamOutput = {
+  /** Mastra 当前 run ID，用于 web 后续确认 tool call。 */
+  runId?: string | undefined;
+  /** Mastra 正文文本流。 */
+  textStream: ReadableStream<string>;
+  /** Mastra 完整事件流；包含 tool-call、tool-result、approval 等事件。 */
+  fullStream?: AsyncIterable<unknown> | undefined;
+};
+
+export type DrawlessToolApprovalResumeRequest = {
+  /** Mastra 当前 agent stream 的 run ID。 */
+  runId: string;
+  /** 等待用户确认或拒绝的 tool call ID。 */
+  toolCallId: string;
 };
 
 export type DrawlessCursorChatReplyInput = {

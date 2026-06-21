@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createCoworkerConversationStream,
+  createCoworkerConversationToolApprovalStream,
   readCoworkerConversationEventStream
 } from "../coworker-conversation";
 
@@ -36,7 +37,44 @@ describe("coworker conversation stream client", () => {
       "http://127.0.0.1:3001/rooms/alpha/coworker/conversation/stream",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ message: "帮我看看画布。" })
+        body: JSON.stringify({ message: "帮我看看画布。", viewport: null })
+      })
+    );
+  });
+
+  it("sends viewport context with a conversation stream", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(new ReadableStream<Uint8Array>(), {
+        status: 200,
+        headers: { "content-type": "text/event-stream; charset=utf-8" }
+      })
+    );
+
+    await createCoworkerConversationStream({
+      roomId: "alpha",
+      message: "画一个矩形",
+      serverUrl: "http://127.0.0.1:3001",
+      viewport: {
+        currentPageId: "page:page",
+        viewportBounds: { x: -200, y: -120, w: 800, h: 600 },
+        viewportCenter: { x: 200, y: 180 },
+        zoom: 1
+      },
+      fetcher
+    });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://127.0.0.1:3001/rooms/alpha/coworker/conversation/stream",
+      expect.objectContaining({
+        body: JSON.stringify({
+          message: "画一个矩形",
+          viewport: {
+            currentPageId: "page:page",
+            viewportBounds: { x: -200, y: -120, w: 800, h: 600 },
+            viewportCenter: { x: 200, y: 180 },
+            zoom: 1
+          }
+        })
       })
     );
   });
@@ -56,6 +94,33 @@ describe("coworker conversation stream client", () => {
       error: { code: "INVALID_REQUEST" }
     });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("opens a server approval stream for a pending tool call", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(new ReadableStream<Uint8Array>(), {
+        status: 200,
+        headers: { "content-type": "text/event-stream; charset=utf-8" }
+      })
+    );
+
+    const result = await createCoworkerConversationToolApprovalStream({
+      roomId: "alpha",
+      runId: "run-1",
+      toolCallId: "call-1",
+      decision: "approve",
+      serverUrl: "http://127.0.0.1:3001",
+      fetcher
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://127.0.0.1:3001/rooms/alpha/coworker/conversation/run-1/tool-calls/call-1/approve",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ runId: "run-1", toolCallId: "call-1" })
+      })
+    );
   });
 
   it("reads coworker conversation SSE events", async () => {

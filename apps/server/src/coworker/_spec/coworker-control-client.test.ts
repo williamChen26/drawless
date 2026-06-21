@@ -51,4 +51,35 @@ describe("coworker control client", () => {
       })
     );
   });
+
+  it("calls coworker conversation approval routes as streams", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response("approved", {
+          status: 200,
+          headers: { "content-type": "text/event-stream; charset=utf-8" }
+        })
+      );
+    const client = createCoworkerControlClient({
+      enabled: true,
+      baseUrl: "http://127.0.0.1:4111",
+      serverUrl: "http://127.0.0.1:3001",
+      requestTimeoutMs: 10000
+    });
+
+    const response = await client.approveConversationToolCall("alpha", {
+      runId: "run-1",
+      toolCallId: "call-1"
+    });
+
+    expect(await response.text()).toBe("approved");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:4111/drawless/rooms/alpha/coworker/conversation/run-1/tool-calls/call-1/approve",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ runId: "run-1", toolCallId: "call-1" })
+      })
+    );
+  });
 });

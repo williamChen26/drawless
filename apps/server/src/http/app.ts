@@ -1,5 +1,5 @@
 import websocket from "@fastify/websocket";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { Readable } from "node:stream";
 import type {
   DrawlessHealthResponse,
@@ -8,6 +8,7 @@ import type {
   DrawlessStorageSummary
 } from "@drawless/shared";
 import {
+  coworkerConversationToolApprovalRequestSchema,
   coworkerConversationStreamRequestSchema,
   parseDrawlessRoomId,
   serverCoworkerStartRequestSchema
@@ -47,6 +48,12 @@ type SyncRouteQuery = {
 
 type CoworkerRouteParams = {
   roomId: string;
+};
+
+type CoworkerConversationToolApprovalRouteParams = {
+  roomId: string;
+  runId: string;
+  toolCallId: string;
 };
 
 const storageSummary: DrawlessStorageSummary = {
@@ -188,23 +195,92 @@ export async function createServerApp({
       }
 
       try {
+        await ensureCoworkerSessionReady(resolvedCoworkerClient, roomId.value);
         const response = await resolvedCoworkerClient.streamConversation(
           roomId.value,
           body.data
         );
-        if (!response.body) {
-          return reply.code(502).send({
-            ok: false,
-            error: "Coworker conversation stream is empty."
-          });
-        }
+        return sendCoworkerStreamResponse(reply, response);
+      } catch (error) {
+        return sendCoworkerControlError(reply, error);
+      }
+    }
+  );
 
-        reply.header(
-          "content-type",
-          response.headers.get("content-type") ?? "text/event-stream; charset=utf-8"
+  app.post<{ Params: CoworkerConversationToolApprovalRouteParams }>(
+    "/rooms/:roomId/coworker/conversation/:runId/tool-calls/:toolCallId/approve",
+    async (request, reply) => {
+      const roomId = parseRoomIdForHttp(request.params.roomId);
+      if (!roomId.ok) {
+        return reply.code(400).send({ ok: false, error: roomId.error });
+      }
+
+      const body = coworkerConversationToolApprovalRequestSchema.safeParse({
+        runId: request.params.runId,
+        toolCallId: request.params.toolCallId
+      });
+      if (!body.success) {
+        return reply.code(400).send({
+          ok: false,
+          error:
+            body.error.issues[0]?.message ??
+            "Invalid coworker conversation approval request."
+        });
+      }
+
+      if (!config.coworker.enabled || !resolvedCoworkerClient) {
+        return reply.code(503).send({
+          ok: false,
+          error: "Coworker control is disabled."
+        });
+      }
+
+      try {
+        const response = await resolvedCoworkerClient.approveConversationToolCall(
+          roomId.value,
+          body.data
         );
-        reply.header("cache-control", "no-cache");
-        return reply.send(Readable.fromWeb(response.body));
+        return sendCoworkerStreamResponse(reply, response);
+      } catch (error) {
+        return sendCoworkerControlError(reply, error);
+      }
+    }
+  );
+
+  app.post<{ Params: CoworkerConversationToolApprovalRouteParams }>(
+    "/rooms/:roomId/coworker/conversation/:runId/tool-calls/:toolCallId/decline",
+    async (request, reply) => {
+      const roomId = parseRoomIdForHttp(request.params.roomId);
+      if (!roomId.ok) {
+        return reply.code(400).send({ ok: false, error: roomId.error });
+      }
+
+      const body = coworkerConversationToolApprovalRequestSchema.safeParse({
+        runId: request.params.runId,
+        toolCallId: request.params.toolCallId
+      });
+      if (!body.success) {
+        return reply.code(400).send({
+          ok: false,
+          error:
+            body.error.issues[0]?.message ??
+            "Invalid coworker conversation approval request."
+        });
+      }
+
+      if (!config.coworker.enabled || !resolvedCoworkerClient) {
+        return reply.code(503).send({
+          ok: false,
+          error: "Coworker control is disabled."
+        });
+      }
+
+      try {
+        const response = await resolvedCoworkerClient.declineConversationToolCall(
+          roomId.value,
+          body.data
+        );
+        return sendCoworkerStreamResponse(reply, response);
       } catch (error) {
         return sendCoworkerControlError(reply, error);
       }
@@ -277,6 +353,45 @@ function parseRoomIdForHttp(roomId: string) {
   return result.ok
     ? { ok: true as const, value: result.value }
     : { ok: false as const, error: result.reason };
+}
+
+async function ensureCoworkerSessionReady(
+  client: CoworkerControlClient,
+  roomId: string
+) {
+  const status = await client.status(roomId);
+  if (status.status === "online") {
+    return;
+  }
+
+  // conversation chat 是 agent 入口；进入长对话前先让 coworker 完成 hydration。
+  // starting/offline 虽然表示存在 session，但还不能保证 edit-canvas 会广播到用户画布。
+  const started = await client.start(roomId, {
+    waitUntilLoaded: true,
+    timeoutMs: 8_000
+  });
+  if (started.status !== "online") {
+    throw new CoworkerControlClientError(
+      `Coworker is not online after start; current status is ${started.status}.`,
+      503
+    );
+  }
+}
+
+function sendCoworkerStreamResponse(reply: FastifyReply, response: Response) {
+  if (!response.body) {
+    return reply.code(502).send({
+      ok: false,
+      error: "Coworker conversation stream is empty."
+    });
+  }
+
+  reply.header(
+    "content-type",
+    response.headers.get("content-type") ?? "text/event-stream; charset=utf-8"
+  );
+  reply.header("cache-control", "no-cache");
+  return reply.send(Readable.fromWeb(response.body));
 }
 
 function sendCoworkerControlError(
