@@ -59,13 +59,16 @@ export function createCoworkerControlClient(
 
   return {
     start: async (roomId, request) => {
+      // web 只传用户可控项；server 在这里补齐 serverUrl 和默认超时，避免浏览器绕过控制面直连 coworker。
       const coworkerRequest: DrawlessCoworkerStartRequest = {
         serverUrl: config.serverUrl,
         instanceId: request.instanceId,
         displayName: request.displayName,
         color: request.color,
         waitUntilLoaded: request.waitUntilLoaded ?? true,
-        timeoutMs: request.timeoutMs ?? 8_000
+        timeoutMs: request.timeoutMs ?? 8_000,
+        // 入场引导必须由真实 coworker presence 发出，前端不能伪造另一个协作者的 cursor chat。
+        sendIntroCursorChat: request.sendIntroCursorChat ?? false
       };
       const payload = await sendCoworkerRequest({
         config,

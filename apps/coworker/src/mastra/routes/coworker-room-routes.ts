@@ -220,12 +220,6 @@ function createConversationSseStream(input: {
       };
 
       try {
-        if (input.result.runId) {
-          emit({
-            type: 'drawless-run',
-            runId: input.result.runId,
-          });
-        }
         if (input.result.fullStream) {
           for await (const chunk of input.result.fullStream) {
             emit(chunk);

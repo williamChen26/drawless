@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @drawless/shared build && next build",
+    "build": "pnpm --filter @drawless/shared build && pnpm --filter @drawless/ui build && next build",
     "dev": "NEXT_PUBLIC_DRAWLESS_SYNC_SERVER_URL=http://127.0.0.1:3001 next dev --hostname 127.0.0.1",
     "start": "next start",
     "test:unit": "vitest run src/lib/_spec",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@drawless/shared": "workspace:*",
+    "@drawless/ui": "workspace:*",
     "@tldraw/sync": "5.0.1",
     "next": "^15.3.0",
     "react": "^19.0.0",

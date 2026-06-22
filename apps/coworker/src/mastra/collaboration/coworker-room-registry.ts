@@ -68,6 +68,10 @@ export class DrawlessCoworkerRoomRegistry {
     if (existing && existing.status !== 'error' && existing.status !== 'stopped') {
       // start 是幂等控制面：server 重试或用户重复点击时，不创建第二个 coworker 身份。
       await this.waitForExistingIfNeeded(existing, request);
+      if (request.sendIntroCursorChat && existing.status === 'online') {
+        // 已在线的 coworker 复用原 presence 发入场提示，避免创建第二个光标身份。
+        void sendIntroCursorChats(existing.client);
+      }
       return this.createStatusResponse(roomId, existing);
     }
 
@@ -75,6 +79,15 @@ export class DrawlessCoworkerRoomRegistry {
     existing?.client.close();
     const now = new Date().toISOString();
     let entry!: CoworkerRoomEntry;
+    let introCursorChatSent = false;
+    const sendIntroCursorChatsOnce = () => {
+      if (!request.sendIntroCursorChat || introCursorChatSent) {
+        return;
+      }
+      introCursorChatSent = true;
+      // onLoad 和 waitUntilLoaded 都可能观察到 online；这里统一做一次性保护。
+      void sendIntroCursorChats(client);
+    };
     const client = createDrawlessCoworkerRoomClient({
       roomId,
       serverUrl: request.serverUrl,
@@ -87,6 +100,7 @@ export class DrawlessCoworkerRoomRegistry {
         entry.snapshot = snapshot;
         entry.lastError = null;
         entry.updatedAt = new Date().toISOString();
+        sendIntroCursorChatsOnce();
       },
       onRemoteChange: (snapshot, changedRecordIds) => {
         // 这里只保存轻量统计，不复制完整 tldraw document，避免制造第二套事实源。
@@ -133,6 +147,10 @@ export class DrawlessCoworkerRoomRegistry {
 
     if (request.waitUntilLoaded) {
       await this.waitForExistingIfNeeded(entry, request);
+    }
+
+    if (entry.status === 'online') {
+      sendIntroCursorChatsOnce();
     }
 
     return this.createStatusResponse(roomId, entry);
@@ -325,6 +343,30 @@ export class DrawlessCoworkerRoomRegistry {
   }
 }
 
+const INTRO_CURSOR_CHAT_MESSAGES = [
+  '你好，我已进入画布。',
+  '可在cursor chat短聊。',
+  '点“对话”可派任务。',
+];
+// 入场提示依赖 tldraw 的 presence overlay；稍微延迟能让 web 端先渲染出 coworker 光标。
+const INTRO_CURSOR_CHAT_INITIAL_DELAY_MS = 800;
+// 每条消息展示约 2 秒，间隔略长一点，避免上一条自动清空 timer 影响下一条。
+const INTRO_CURSOR_CHAT_INTERVAL_MS = 2400;
+// 默认把入场光标放在首屏画布内，避开左上工具栏和右侧样式面板。
+const INTRO_CURSOR_CHAT_CURSOR = { x: 220, y: 180 };
+
+async function sendIntroCursorChats(client: DrawlessCoworkerRoomClient) {
+  // 首次入场时稍等一拍，给 web 端协作者列表和 presence overlay 留出渲染时间。
+  await wait(INTRO_CURSOR_CHAT_INITIAL_DELAY_MS);
+  for (const [index, message] of INTRO_CURSOR_CHAT_MESSAGES.entries()) {
+    client.sendCursorChat(message, {
+      x: INTRO_CURSOR_CHAT_CURSOR.x,
+      y: INTRO_CURSOR_CHAT_CURSOR.y + index * 24,
+    });
+    await wait(INTRO_CURSOR_CHAT_INTERVAL_MS);
+  }
+}
+
 function createConversationPrompt(request: DrawlessCoworkerConversationStreamRequest) {
   const viewportLines = request.viewport
     ? [
@@ -378,5 +420,11 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
     if (timeout) {
       clearTimeout(timeout);
     }
+  });
+}
+
+function wait(timeoutMs: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, timeoutMs);
   });
 }

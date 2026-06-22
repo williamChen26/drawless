@@ -111,7 +111,9 @@ function CoworkerControlBar({ coworker }: { coworker: CoworkerControlState }) {
         className="canvas-shell__coworker-action"
         type="button"
         disabled={coworker.view.busy}
-        onClick={coworker.refresh}
+        onClick={() => {
+          void coworker.refresh();
+        }}
       >
         状态
       </button>
@@ -119,7 +121,9 @@ function CoworkerControlBar({ coworker }: { coworker: CoworkerControlState }) {
         className="canvas-shell__coworker-action"
         type="button"
         disabled={coworker.view.busy}
-        onClick={coworker.start}
+        onClick={() => {
+          void coworker.start();
+        }}
       >
         进入
       </button>
@@ -127,7 +131,9 @@ function CoworkerControlBar({ coworker }: { coworker: CoworkerControlState }) {
         className="canvas-shell__coworker-action"
         type="button"
         disabled={coworker.view.busy}
-        onClick={coworker.stop}
+        onClick={() => {
+          void coworker.stop();
+        }}
       >
         离开
       </button>

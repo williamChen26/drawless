@@ -15,6 +15,7 @@ import {
   type CollaborationState
 } from "./collaboration-state";
 import { CoworkerConversationWindow } from "./coworker-conversation-window";
+import { CoworkerEntryDialog } from "./coworker-entry-dialog";
 import { useCoworkerControl } from "./coworker-control-state";
 import { useRoomShare } from "./room-share-state";
 
@@ -122,6 +123,7 @@ function SyncedCanvasShell({
       <div className="canvas-shell__editor" data-testid="tldraw-host">
         <Tldraw
           store={store}
+          licenseKey={'tldraw-2026-09-30/WyJUSG9jenplMSIsWyIqIl0sMTYsIjIwMjYtMDktMzAiXQ.uxnHwI7nKxk3KwhNGpIcRZCphK02Kyhc4BDMbbZZ1FtJcYfIz0LgVY34aH50SH7RqyL7pFnbGgzuyydfbguWVg'}
           onMount={(editor) => {
             editorRef.current = editor;
           }}
@@ -130,6 +132,8 @@ function SyncedCanvasShell({
           roomId={collaboration.roomId}
           getCanvasViewport={() => createCanvasViewportContext(editorRef.current)}
         />
+        {/* 入场弹窗放在 tldraw host 内，确保遮罩、焦点管理和画布工具栏处在同一客户端边界。 */}
+        <CoworkerEntryDialog coworker={coworker} roomId={collaboration.roomId} />
       </div>
     </CanvasShellFrame>
   );
@@ -142,6 +146,7 @@ function createCanvasViewportContext(
     return null;
   }
 
+  // conversation tool 只需要用户当前可视区，不复制完整 tldraw document，避免产生第二套画布事实源。
   const bounds = editor.getViewportPageBounds();
   const camera = editor.getCamera();
   return {

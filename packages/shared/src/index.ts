@@ -157,6 +157,8 @@ export interface DrawlessCoworkerStartRequest {
   waitUntilLoaded: boolean;
   /** 等待首次 room hydration 的超时时间，单位毫秒。 */
   timeoutMs: number;
+  /** 是否在成功进入协同后主动发送入场 cursor chat 引导。 */
+  sendIntroCursorChat: boolean;
 }
 
 /**
@@ -173,6 +175,8 @@ export interface DrawlessServerCoworkerStartRequest {
   waitUntilLoaded?: boolean | undefined;
   /** 等待首次 room hydration 的超时时间，单位毫秒；不传时由 server 决定默认值。 */
   timeoutMs?: number | undefined;
+  /** 是否在成功进入协同后主动发送入场 cursor chat 引导。 */
+  sendIntroCursorChat?: boolean | undefined;
 }
 
 /**
@@ -788,7 +792,8 @@ export const coworkerStartRequestSchema = z.object({
   displayName: z.string().trim().min(1).optional(),
   color: z.string().trim().min(1).optional(),
   waitUntilLoaded: z.boolean().default(true),
-  timeoutMs: z.number().int().min(500).max(30_000).default(8_000)
+  timeoutMs: z.number().int().min(500).max(30_000).default(8_000),
+  sendIntroCursorChat: z.boolean().default(false)
 }) satisfies z.ZodType<DrawlessCoworkerStartRequest>;
 
 export const coworkerControlConfigSchema = z.object({
@@ -803,7 +808,8 @@ export const serverCoworkerStartRequestSchema = z.object({
   displayName: z.string().trim().min(1).optional(),
   color: z.string().trim().min(1).optional(),
   waitUntilLoaded: z.boolean().optional(),
-  timeoutMs: z.number().int().min(500).max(30_000).optional()
+  timeoutMs: z.number().int().min(500).max(30_000).optional(),
+  sendIntroCursorChat: z.boolean().optional()
 }) satisfies z.ZodType<DrawlessServerCoworkerStartRequest>;
 
 export const coworkerRoomSnapshotSummarySchema = z.object({

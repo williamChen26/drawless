@@ -63,6 +63,7 @@ pnpm dev
 前端：
 
 - `NEXT_PUBLIC_DRAWLESS_SYNC_SERVER_URL`：协同后端基础地址，默认 `ws://127.0.0.1:3001`。
+- `NEXT_PUBLIC_DRAWLESS_SERVER_URL`：普通 HTTP 控制接口基础地址，默认跟随协同后端地址。
 
 后端：
 
@@ -70,6 +71,11 @@ pnpm dev
 - `PORT`：监听端口，默认 `3001`。
 - `SYNC_ROUTE`：WebSocket 协同路由前缀，默认 `/sync`。
 - `ALLOWED_ORIGINS`：允许访问协同服务的浏览器来源列表，使用逗号分隔。
+- `COWORKER_ENABLED`：是否启用 coworker 控制代理，默认 `false`。
+- `COWORKER_BASE_URL`：coworker 服务基础地址，启用 coworker 时使用。
+- `SERVER_PUBLIC_URL`：server 对外可访问地址，coworker 进入 sync room 时使用。
+
+Railway 部署配置见 [DEPLOYMENT.md](./DEPLOYMENT.md)。
 
 ## 验证
 

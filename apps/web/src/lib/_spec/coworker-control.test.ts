@@ -45,7 +45,10 @@ describe("coworker control client", () => {
       fetcher
     });
 
-    const result = await client.start({ waitUntilLoaded: false });
+    const result = await client.start({
+      waitUntilLoaded: false,
+      sendIntroCursorChat: true
+    });
 
     expect(result).toMatchObject({
       ok: true,
@@ -55,7 +58,10 @@ describe("coworker control client", () => {
       "http://127.0.0.1:3001/rooms/alpha/coworker/start",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ waitUntilLoaded: false })
+        body: JSON.stringify({
+          waitUntilLoaded: false,
+          sendIntroCursorChat: true
+        })
       })
     );
   });

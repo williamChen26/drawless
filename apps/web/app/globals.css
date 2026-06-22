@@ -23,6 +23,165 @@ select {
   font: inherit;
 }
 
+/* packages/ui 只输出稳定类名；具体视觉在 web 侧集中定义，避免 shared package 绑定某个 app 主题。 */
+.drawless-ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.drawless-ui-button:focus-visible,
+.drawless-ui-input:focus-visible,
+.drawless-ui-textarea:focus-visible,
+.drawless-ui-dialog-content:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.drawless-ui-button:disabled,
+.drawless-ui-input:disabled,
+.drawless-ui-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.drawless-ui-button--default {
+  border-color: #111;
+  background: #111;
+  color: #fff;
+}
+
+.drawless-ui-button--secondary {
+  border-color: #c9c9c9;
+  background: #f6f6f6;
+  color: #111;
+}
+
+.drawless-ui-button--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: #333;
+}
+
+.drawless-ui-button--default-size {
+  height: 34px;
+  padding: 0 14px;
+}
+
+.drawless-ui-button--sm {
+  height: 30px;
+  padding: 0 10px;
+}
+
+.drawless-ui-button--icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.drawless-ui-input {
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+  border: 1px solid #c9c9c9;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-size: 14px;
+  padding: 0 10px;
+}
+
+.drawless-ui-textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #c9c9c9;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+/* Dialog 使用 Radix 负责可访问性，这里只控制遮罩、尺寸和 drawless 当前调试壳层的克制视觉。 */
+.drawless-ui-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(17 17 17 / 28%);
+}
+
+.drawless-ui-dialog-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 41;
+  display: grid;
+  gap: 16px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid #d7d7d7;
+  border-radius: 8px;
+  background: #fff;
+  color: #111;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgb(17 17 17 / 20%);
+}
+
+.drawless-ui-dialog-header,
+.drawless-ui-dialog-footer {
+  display: grid;
+  gap: 8px;
+}
+
+.drawless-ui-dialog-footer {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.drawless-ui-dialog-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.drawless-ui-dialog-description {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* coworker 首次入场确认弹窗的业务样式；暂时不抽成通用表单模式。 */
+.coworker-entry-dialog__body {
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.coworker-entry-dialog__body p {
+  margin: 0;
+}
+
+.coworker-entry-dialog__error {
+  color: #b42318;
+  overflow-wrap: anywhere;
+}
+
 .canvas-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -139,20 +298,17 @@ select {
   z-index: 20;
   min-width: 64px;
   height: 34px;
-  border: 1px solid #ccc;
-  background: #fff;
-  color: #111;
 }
 
 .coworker-conversation {
   position: absolute;
   left: 16px;
-  top: 16px;
+  top: 56px;
   z-index: 20;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(440px, calc(100vw - 32px));
-  max-height: min(620px, calc(100vh - 92px));
+  max-height: min(620px, calc(100vh - 132px));
   border: 1px solid #ccc;
   background: #fff;
   color: #111;
@@ -169,17 +325,12 @@ select {
 
 .coworker-conversation__status {
   margin-left: auto;
+  border: 1px solid #d9d9d9;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #f8f8f8;
+  color: #333;
   font-size: 12px;
-}
-
-.coworker-conversation__header button,
-.coworker-conversation__form button,
-.coworker-conversation__approval button {
-  min-width: 56px;
-  height: 30px;
-  border: 1px solid #ccc;
-  background: #fff;
-  color: #111;
 }
 
 .coworker-conversation__body {
@@ -190,6 +341,7 @@ select {
 
 .coworker-conversation__empty,
 .coworker-conversation__message pre,
+.coworker-conversation__tool-payload,
 .coworker-conversation__events pre {
   margin: 0;
   overflow-wrap: anywhere;
@@ -219,9 +371,35 @@ select {
 }
 
 .coworker-conversation__message pre,
+.coworker-conversation__tool-payload,
 .coworker-conversation__events pre {
   font-size: 12px;
   line-height: 1.45;
+}
+
+.coworker-conversation__tool-block {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  font-size: 12px;
+}
+
+.coworker-conversation__tool-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.coworker-conversation__tool-header code,
+.coworker-conversation__tool-block small {
+  overflow-wrap: anywhere;
+}
+
+.coworker-conversation__tool-payload {
+  max-height: 120px;
+  overflow: auto;
 }
 
 .coworker-conversation__events {
@@ -276,9 +454,13 @@ select {
   border-top: 1px solid #ddd;
 }
 
-.coworker-conversation__form textarea {
-  min-width: 0;
-  resize: vertical;
-  border: 1px solid #ccc;
-  padding: 8px;
+.coworker-conversation__input {
+  min-height: 72px;
+  max-height: 180px;
+}
+
+.coworker-conversation__submit {
+  align-self: end;
+  min-width: 64px;
+  height: 38px;
 }

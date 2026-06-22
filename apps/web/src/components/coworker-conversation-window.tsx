@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { DrawlessCanvasViewportContext } from "@drawless/shared";
+import { Button, Textarea } from "@drawless/ui";
 
 import {
   createCoworkerConversationStream,
@@ -11,14 +12,14 @@ import {
 } from "@/lib/coworker-conversation";
 import {
   createCoworkerConversationOutput,
-  type CoworkerConversationEventSummary,
   type CoworkerConversationToolApproval
 } from "@/lib/coworker-conversation-output";
 import {
-  appendCoworkerConversationEventBlock,
-  appendCoworkerConversationTextBlock,
+  appendCoworkerConversationOutputBlock,
+  appendCoworkerConversationTextChunk,
   getCoworkerConversationPendingApproval,
   hasCoworkerConversationApproval,
+  setCoworkerConversationToolStatus,
   type CoworkerConversationTimelineBlock
 } from "@/lib/coworker-conversation-timeline";
 
@@ -50,6 +51,7 @@ export function CoworkerConversationWindow({
   const [status, setStatus] = useState<ConversationStatus>("idle");
   const abortControllerRef = useRef<AbortController | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const busy = isConversationBusy(status);
 
   useEffect(() => {
     return () => {
@@ -74,7 +76,7 @@ export function CoworkerConversationWindow({
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextMessage = message.trim();
-    if (!nextMessage || isConversationBusy(status)) {
+    if (!nextMessage || busy) {
       return;
     }
 
@@ -140,6 +142,7 @@ export function CoworkerConversationWindow({
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    setToolDecisionStatus(turn.id, approval, decision);
     setTurnStatus(turn.id, "streaming");
     setStatus("streaming");
 
@@ -196,16 +199,12 @@ export function CoworkerConversationWindow({
       if (output.event.runId) {
         setTurnRunId(turnId, output.event.runId);
       }
-      if (output.kind === "text-delta" && output.text) {
-        appendTextToTurn(turnId, output.text);
-      } else {
-        appendEventToTurn(turnId, output.event);
-        if (output.event.type === "error") {
-          streamFailed = true;
-        }
-        if (output.event.approval) {
-          awaitingApproval = true;
-        }
+      appendOutputToTurn(turnId, output);
+      if (output.event.type === "error") {
+        streamFailed = true;
+      }
+      if (output.event.approval) {
+        awaitingApproval = true;
       }
     });
 
@@ -224,30 +223,43 @@ export function CoworkerConversationWindow({
         turn.id === turnId
           ? {
               ...turn,
-              blocks: appendCoworkerConversationTextBlock(
-                turn.blocks,
-                chunk,
-                createLocalId
-              )
+              blocks: appendCoworkerConversationTextChunk(turn.blocks, chunk, createLocalId)
             }
           : turn
       )
     );
   };
 
-  const appendEventToTurn = (
+  const appendOutputToTurn = (
     turnId: string,
-    summary: CoworkerConversationEventSummary
+    output: ReturnType<typeof createCoworkerConversationOutput>
   ) => {
     setTurns((current) =>
       current.map((turn) =>
         turn.id === turnId
           ? {
               ...turn,
-              blocks: appendCoworkerConversationEventBlock(
+              blocks: appendCoworkerConversationOutputBlock(turn.blocks, output, createLocalId)
+            }
+          : turn
+      )
+    );
+  };
+
+  const setToolDecisionStatus = (
+    turnId: string,
+    approval: CoworkerConversationToolApproval,
+    decision: "approve" | "decline"
+  ) => {
+    setTurns((current) =>
+      current.map((turn) =>
+        turn.id === turnId
+          ? {
+              ...turn,
+              blocks: setCoworkerConversationToolStatus(
                 turn.blocks,
-                summary,
-                createLocalId
+                approval,
+                decision === "approve" ? "running" : "declined"
               )
             }
           : turn
@@ -273,24 +285,27 @@ export function CoworkerConversationWindow({
 
   if (!open) {
     return (
-      <button
+      <Button
         className="coworker-conversation__toggle"
         type="button"
+        variant="secondary"
         onClick={() => setOpen(true)}
       >
         对话
-      </button>
+      </Button>
     );
   }
 
   return (
     <aside className="coworker-conversation" aria-label="Coworker conversation">
       <header className="coworker-conversation__header">
-        <strong>conversation</strong>
-        <span className="coworker-conversation__status">{status}</span>
-        <button type="button" onClick={close}>
+        <strong>对话</strong>
+        <span className="coworker-conversation__status">
+          {formatConversationStatus(status)}
+        </span>
+        <Button size="sm" type="button" variant="ghost" onClick={close}>
           关闭
-        </button>
+        </Button>
       </header>
       <div className="coworker-conversation__body" aria-live="polite" ref={bodyRef}>
         {turns.length === 0 ? (
@@ -320,78 +335,18 @@ export function CoworkerConversationWindow({
                       <pre>{getCoworkerPlaceholder(turn.status)}</pre>
                     </article>
                   ) : (
-                    turn.blocks.map((block) =>
-                      block.kind === "text" ? (
-                        <article
-                          className="coworker-conversation__message"
-                          data-role="coworker"
-                          key={block.id}
-                        >
-                          <strong>coworker</strong>
-                          <pre>{block.text}</pre>
-                        </article>
-                      ) : (
-                        <section
-                          className="coworker-conversation__event-block"
-                          key={block.id}
-                        >
-                          <details className="coworker-conversation__events">
-                            <summary>events {block.events.length}</summary>
-                            <ol>
-                              {block.events.map((event) => (
-                                <li key={event.id}>
-                                  <span>{event.summary.label}</span>
-                                  <code>{event.summary.type}</code>
-                                  {event.summary.detail ? (
-                                    <small>{event.summary.detail}</small>
-                                  ) : null}
-                                  <pre>{formatRawStreamEvent(event.summary.raw)}</pre>
-                                </li>
-                              ))}
-                            </ol>
-                          </details>
-                          {turn.status === "awaiting_approval" &&
-                          pendingApproval &&
-                          hasCoworkerConversationApproval(
-                            block,
-                            pendingApproval
-                          ) ? (
-                            <div className="coworker-conversation__approval-panel">
-                              <strong>等待确认</strong>
-                              <small>{pendingApproval.toolName ?? "tool call"}</small>
-                              <div className="coworker-conversation__approval">
-                                <button
-                                  type="button"
-                                  disabled={status === "streaming"}
-                                  onClick={() =>
-                                    resolveToolApproval(
-                                      turn,
-                                      pendingApproval,
-                                      "approve"
-                                    )
-                                  }
-                                >
-                                  确认执行
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={status === "streaming"}
-                                  onClick={() =>
-                                    resolveToolApproval(
-                                      turn,
-                                      pendingApproval,
-                                      "decline"
-                                    )
-                                  }
-                                >
-                                  拒绝
-                                </button>
-                              </div>
-                            </div>
-                          ) : null}
-                        </section>
-                      )
-                    )
+                    turn.blocks.map((block) => (
+                      <ConversationTimelineBlockView
+                        block={block}
+                        conversationStatus={status}
+                        key={block.id}
+                        onResolveApproval={(approval, decision) =>
+                          resolveToolApproval(turn, approval, decision)
+                        }
+                        pendingApproval={pendingApproval}
+                        turnStatus={turn.status}
+                      />
+                    ))
                   )}
                 </div>
               </section>
@@ -400,19 +355,170 @@ export function CoworkerConversationWindow({
         )}
       </div>
       <form className="coworker-conversation__form" onSubmit={sendMessage}>
-        <textarea
+        <Textarea
           aria-label="Conversation message"
-          disabled={isConversationBusy(status)}
+          className="coworker-conversation__input"
+          disabled={busy}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder="输入要让 coworker 长回复的问题"
+          placeholder="描述要让 coworker 完成的任务"
           rows={3}
           value={message}
         />
-        <button type="submit" disabled={!message.trim() || isConversationBusy(status)}>
+        <Button
+          className="coworker-conversation__submit"
+          type="submit"
+          disabled={!message.trim() || busy}
+        >
           {status === "streaming" ? "输出中" : "发送"}
-        </button>
+        </Button>
       </form>
     </aside>
+  );
+}
+
+function ConversationTimelineBlockView({
+  block,
+  conversationStatus,
+  onResolveApproval,
+  pendingApproval,
+  turnStatus
+}: {
+  block: CoworkerConversationTimelineBlock;
+  conversationStatus: ConversationStatus;
+  onResolveApproval: (
+    approval: CoworkerConversationToolApproval,
+    decision: "approve" | "decline"
+  ) => void;
+  pendingApproval: CoworkerConversationToolApproval | null;
+  turnStatus: ConversationStatus;
+}) {
+  if (block.kind === "text") {
+    return (
+      <article className="coworker-conversation__message" data-role="coworker">
+        <strong>coworker</strong>
+        <pre>{block.text}</pre>
+      </article>
+    );
+  }
+
+  if (block.kind === "tool") {
+    return (
+      <ConversationToolBlockView
+        block={block}
+        conversationStatus={conversationStatus}
+        onResolveApproval={onResolveApproval}
+        pendingApproval={pendingApproval}
+        turnStatus={turnStatus}
+      />
+    );
+  }
+
+  return <ConversationDebugBlockView block={block} />;
+}
+
+function ConversationToolBlockView({
+  block,
+  conversationStatus,
+  onResolveApproval,
+  pendingApproval,
+  turnStatus
+}: {
+  block: Extract<CoworkerConversationTimelineBlock, { kind: "tool" }>;
+  conversationStatus: ConversationStatus;
+  onResolveApproval: (
+    approval: CoworkerConversationToolApproval,
+    decision: "approve" | "decline"
+  ) => void;
+  pendingApproval: CoworkerConversationToolApproval | null;
+  turnStatus: ConversationStatus;
+}) {
+  const toolArgs = formatToolArgs(block.argsText, block.args);
+  const shouldShowApproval =
+    turnStatus === "awaiting_approval" &&
+    pendingApproval &&
+    hasCoworkerConversationApproval(block, pendingApproval);
+
+  return (
+    <section
+      className="coworker-conversation__tool-block"
+      data-status={block.status}
+    >
+      <header className="coworker-conversation__tool-header">
+        <strong>{block.toolName ?? "tool call"}</strong>
+        <code>{formatToolStatus(block.status)}</code>
+      </header>
+      <small>{block.toolCallId}</small>
+      {toolArgs ? (
+        <pre className="coworker-conversation__tool-payload">{toolArgs}</pre>
+      ) : null}
+      {block.result !== null ? (
+        <details className="coworker-conversation__events">
+          <summary>result</summary>
+          <pre>{formatRawStreamEvent(block.result)}</pre>
+        </details>
+      ) : null}
+      {shouldShowApproval && pendingApproval ? (
+        <div className="coworker-conversation__approval-panel">
+          <strong>等待确认</strong>
+          <small>{pendingApproval.toolName ?? "tool call"}</small>
+          <div className="coworker-conversation__approval">
+            <Button
+              type="button"
+              disabled={conversationStatus === "streaming"}
+              onClick={() => onResolveApproval(pendingApproval, "approve")}
+            >
+              确认执行
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={conversationStatus === "streaming"}
+              onClick={() => onResolveApproval(pendingApproval, "decline")}
+            >
+              拒绝
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      <details className="coworker-conversation__events">
+        <summary>raw events {block.events.length}</summary>
+        <ConversationEventList events={block.events} />
+      </details>
+    </section>
+  );
+}
+
+function ConversationDebugBlockView({
+  block
+}: {
+  block: Extract<CoworkerConversationTimelineBlock, { kind: "debug" }>;
+}) {
+  return (
+    <section className="coworker-conversation__event-block">
+      <details className="coworker-conversation__events">
+        <summary>debug events {block.events.length}</summary>
+        <ConversationEventList events={block.events} />
+      </details>
+    </section>
+  );
+}
+
+function ConversationEventList({
+  events
+}: {
+  events: Extract<CoworkerConversationTimelineBlock, { kind: "debug" }>["events"];
+}) {
+  return (
+    <ol>
+      {events.map((event) => (
+        <li key={event.id}>
+          <span>{event.summary.label}</span>
+          <code>{event.summary.type}</code>
+          {event.summary.detail ? <small>{event.summary.detail}</small> : null}
+          <pre>{formatRawStreamEvent(event.summary.raw)}</pre>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -446,6 +552,38 @@ function formatRawStreamEvent(event: unknown) {
   return JSON.stringify(event, null, 2);
 }
 
+function formatToolArgs(argsText: string, args: unknown) {
+  if (argsText.trim()) {
+    return argsText;
+  }
+  if (args === null) {
+    return "";
+  }
+  return JSON.stringify(args, null, 2);
+}
+
+function formatToolStatus(status: string) {
+  if (status === "input-streaming") {
+    return "参数生成中";
+  }
+  if (status === "input-ready") {
+    return "待调用";
+  }
+  if (status === "awaiting-approval") {
+    return "等待确认";
+  }
+  if (status === "running") {
+    return "执行中";
+  }
+  if (status === "done") {
+    return "已完成";
+  }
+  if (status === "declined") {
+    return "已拒绝";
+  }
+  return "错误";
+}
+
 function getPendingApproval(
   turn: ConversationTurn
 ): CoworkerConversationToolApproval | null {
@@ -463,6 +601,22 @@ function getCoworkerPlaceholder(status: ConversationStatus) {
     return "[stream error]";
   }
   return "";
+}
+
+function formatConversationStatus(status: ConversationStatus) {
+  if (status === "streaming") {
+    return "输出中";
+  }
+  if (status === "awaiting_approval") {
+    return "待确认";
+  }
+  if (status === "done") {
+    return "已完成";
+  }
+  if (status === "error") {
+    return "错误";
+  }
+  return "就绪";
 }
 
 function getCoworkerServerUrl() {

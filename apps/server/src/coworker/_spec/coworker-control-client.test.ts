@@ -38,18 +38,16 @@ describe("coworker control client", () => {
     });
 
     expect(status.status).toBe("starting");
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:4111/drawless/rooms/alpha/coworker/start",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          serverUrl: "http://127.0.0.1:3001",
-          displayName: "Drawless Coworker",
-          waitUntilLoaded: false,
-          timeoutMs: 8000
-        })
-      })
-    );
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("http://127.0.0.1:4111/drawless/rooms/alpha/coworker/start");
+    expect(init).toEqual(expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      serverUrl: "http://127.0.0.1:3001",
+      displayName: "Drawless Coworker",
+      waitUntilLoaded: false,
+      timeoutMs: 8000,
+      sendIntroCursorChat: false
+    });
   });
 
   it("calls coworker conversation approval routes as streams", async () => {

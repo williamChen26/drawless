@@ -1,25 +1,67 @@
 import type {
   CoworkerConversationEventSummary,
+  CoworkerConversationOutput,
   CoworkerConversationToolApproval
 } from "./coworker-conversation-output";
 
 export type CoworkerConversationTimelineBlock =
-  | {
-      /** 本地渲染用 ID，不作为跨端消息事实源。 */
-      id: string;
-      /** 正文 text-delta 连续片段。 */
-      kind: "text";
-      /** 连续 text-delta 拼接出的正文。 */
-      text: string;
-    }
-  | {
-      /** 本地渲染用 ID，不作为跨端消息事实源。 */
-      id: string;
-      /** 连续非正文 stream event 片段。 */
-      kind: "events";
-      /** 当前 event block 内按到达顺序保留的事件。 */
-      events: CoworkerConversationEventEntry[];
-    };
+  | CoworkerConversationTextBlock
+  | CoworkerConversationToolBlock
+  | CoworkerConversationDebugBlock;
+
+export type CoworkerConversationTextBlock = {
+  /** 本地渲染用 ID，不作为跨端消息事实源。 */
+  id: string;
+  /** 正文模块。 */
+  kind: "text";
+  /** Mastra text part ID；fallback textStream 没有该值时为 null。 */
+  textId: string | null;
+  /** 连续 text-delta 拼接出的正文。 */
+  text: string;
+  /** 当前正文模块是否已经收到 text-end。 */
+  status: "streaming" | "done";
+};
+
+export type CoworkerConversationToolBlock = {
+  /** 本地渲染用 ID，不作为跨端消息事实源。 */
+  id: string;
+  /** 工具模块。 */
+  kind: "tool";
+  /** Mastra tool call ID；用于把 input delta、approval、result 聚到一起。 */
+  toolCallId: string;
+  /** 工具名称；部分异常事件里可能缺失。 */
+  toolName: string | null;
+  /** 工具参数流拼接出的原始 JSON 文本。 */
+  argsText: string;
+  /** tool-call 或 approval 给出的最终参数。 */
+  args: unknown;
+  /** tool-result 返回的原始结果。 */
+  result: unknown;
+  /** 当前工具调用的生命周期状态。 */
+  status: CoworkerConversationToolStatus;
+  /** 需要用户确认的 tool call；普通工具事件为 null。 */
+  approval: CoworkerConversationToolApproval | null;
+  /** 与该 toolCallId 相关的原始 stream event。 */
+  events: CoworkerConversationEventEntry[];
+};
+
+export type CoworkerConversationToolStatus =
+  | "input-streaming"
+  | "input-ready"
+  | "awaiting-approval"
+  | "running"
+  | "done"
+  | "declined"
+  | "error";
+
+export type CoworkerConversationDebugBlock = {
+  /** 本地渲染用 ID，不作为跨端消息事实源。 */
+  id: string;
+  /** 非正文、非工具的调试事件模块。 */
+  kind: "debug";
+  /** 连续调试事件，按到达顺序保留。 */
+  events: CoworkerConversationEventEntry[];
+};
 
 export type CoworkerConversationEventEntry = {
   /** 本地渲染用 ID，不作为跨端事件事实源。 */
@@ -30,13 +72,93 @@ export type CoworkerConversationEventEntry = {
 
 export type CoworkerConversationIdFactory = () => string;
 
-export function appendCoworkerConversationTextBlock(
+export function appendCoworkerConversationOutputBlock(
+  blocks: CoworkerConversationTimelineBlock[],
+  output: CoworkerConversationOutput,
+  createId: CoworkerConversationIdFactory
+): CoworkerConversationTimelineBlock[] {
+  const type = output.event.type;
+
+  if (output.kind === "text-delta") {
+    return output.text
+      ? appendTextChunk(blocks, output.text, getTextId(output.raw), createId)
+      : blocks;
+  }
+
+  if (type === "text-end") {
+    return completeTextBlock(blocks, getTextId(output.raw));
+  }
+
+  if (isToolLifecycleEvent(type)) {
+    return appendToolEvent(blocks, output.event, createId);
+  }
+
+  if (isIgnoredControlEvent(type)) {
+    return blocks;
+  }
+
+  return appendDebugEvent(blocks, output.event, createId);
+}
+
+export function appendCoworkerConversationTextChunk(
   blocks: CoworkerConversationTimelineBlock[],
   chunk: string,
   createId: CoworkerConversationIdFactory
 ): CoworkerConversationTimelineBlock[] {
+  return appendTextChunk(blocks, chunk, null, createId);
+}
+
+export function getCoworkerConversationPendingApproval(
+  blocks: CoworkerConversationTimelineBlock[]
+): CoworkerConversationToolApproval | null {
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (block?.kind === "tool" && block.status === "awaiting-approval") {
+      return block.approval;
+    }
+  }
+
+  return null;
+}
+
+export function hasCoworkerConversationApproval(
+  block: CoworkerConversationTimelineBlock,
+  approval: CoworkerConversationToolApproval
+) {
+  return (
+    block.kind === "tool" &&
+    block.toolCallId === approval.toolCallId &&
+    block.approval?.runId === approval.runId
+  );
+}
+
+export function setCoworkerConversationToolStatus(
+  blocks: CoworkerConversationTimelineBlock[],
+  approval: CoworkerConversationToolApproval,
+  status: Extract<CoworkerConversationToolStatus, "running" | "declined">
+): CoworkerConversationTimelineBlock[] {
+  return blocks.map((block) =>
+    block.kind === "tool" && block.toolCallId === approval.toolCallId
+      ? {
+          ...block,
+          status
+        }
+      : block
+  );
+}
+
+function appendTextChunk(
+  blocks: CoworkerConversationTimelineBlock[],
+  chunk: string,
+  textId: string | null,
+  createId: CoworkerConversationIdFactory
+): CoworkerConversationTimelineBlock[] {
   const lastBlock = blocks[blocks.length - 1];
-  if (lastBlock?.kind === "text") {
+  if (
+    lastBlock?.kind === "text" &&
+    lastBlock.status === "streaming" &&
+    isSameTextPart(lastBlock.textId, textId)
+  ) {
     return [
       ...blocks.slice(0, -1),
       {
@@ -51,19 +173,119 @@ export function appendCoworkerConversationTextBlock(
     {
       id: createId(),
       kind: "text",
-      text: chunk
+      textId,
+      text: chunk,
+      status: "streaming"
     }
   ];
 }
 
-export function appendCoworkerConversationEventBlock(
+function completeTextBlock(
+  blocks: CoworkerConversationTimelineBlock[],
+  textId: string | null
+): CoworkerConversationTimelineBlock[] {
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (block?.kind === "text" && isSameTextPart(block.textId, textId)) {
+      return [
+        ...blocks.slice(0, index),
+        {
+          ...block,
+          status: "done"
+        },
+        ...blocks.slice(index + 1)
+      ];
+    }
+  }
+
+  return blocks;
+}
+
+function appendToolEvent(
+  blocks: CoworkerConversationTimelineBlock[],
+  summary: CoworkerConversationEventSummary,
+  createId: CoworkerConversationIdFactory
+): CoworkerConversationTimelineBlock[] {
+  const toolCallId = getToolCallId(summary.raw) ?? summary.approval?.toolCallId;
+  if (!toolCallId) {
+    return appendDebugEvent(blocks, summary, createId);
+  }
+
+  const event = { id: createId(), summary };
+  const index = blocks.findIndex(
+    (block) => block.kind === "tool" && block.toolCallId === toolCallId
+  );
+  const current =
+    index >= 0 && blocks[index]?.kind === "tool"
+      ? (blocks[index] as CoworkerConversationToolBlock)
+      : createToolBlock({
+          createId,
+          toolCallId,
+          toolName: getToolName(summary.raw) ?? summary.approval?.toolName ?? null,
+        });
+  const next = updateToolBlock(current, summary, event);
+
+  if (index < 0) {
+    return [...blocks, next];
+  }
+
+  return [...blocks.slice(0, index), next, ...blocks.slice(index + 1)];
+}
+
+function createToolBlock(input: {
+  createId: CoworkerConversationIdFactory;
+  toolCallId: string;
+  toolName: string | null;
+}): CoworkerConversationToolBlock {
+  return {
+    id: input.createId(),
+    kind: "tool",
+    toolCallId: input.toolCallId,
+    toolName: input.toolName,
+    argsText: "",
+    args: null,
+    result: null,
+    status: "input-streaming",
+    approval: null,
+    events: []
+  };
+}
+
+function updateToolBlock(
+  block: CoworkerConversationToolBlock,
+  summary: CoworkerConversationEventSummary,
+  event: CoworkerConversationEventEntry
+): CoworkerConversationToolBlock {
+  const type = summary.type;
+  const argsTextDelta = getArgsTextDelta(summary.raw);
+  const nextArgsText = argsTextDelta
+    ? `${block.argsText}${argsTextDelta}`
+    : block.argsText;
+  const explicitArgs = getToolArgs(summary.raw) ?? summary.approval?.args;
+  const nextArgs = explicitArgs ?? parseArgsText(nextArgsText) ?? block.args;
+  const explicitResult = getToolResult(summary.raw);
+  const toolName = getToolName(summary.raw) ?? summary.approval?.toolName ?? block.toolName;
+
+  return {
+    ...block,
+    toolName,
+    argsText: nextArgsText,
+    args: nextArgs,
+    result: explicitResult ?? block.result,
+    status: getNextToolStatus(type, block.status),
+    approval: summary.approval ?? block.approval,
+    events: [...block.events, event]
+  };
+}
+
+function appendDebugEvent(
   blocks: CoworkerConversationTimelineBlock[],
   summary: CoworkerConversationEventSummary,
   createId: CoworkerConversationIdFactory
 ): CoworkerConversationTimelineBlock[] {
   const event = { id: createId(), summary };
   const lastBlock = blocks[blocks.length - 1];
-  if (lastBlock?.kind === "events") {
+  if (lastBlock?.kind === "debug") {
     return [
       ...blocks.slice(0, -1),
       {
@@ -77,42 +299,141 @@ export function appendCoworkerConversationEventBlock(
     ...blocks,
     {
       id: createId(),
-      kind: "events",
+      kind: "debug",
       events: [event]
     }
   ];
 }
 
-export function getCoworkerConversationPendingApproval(
-  blocks: CoworkerConversationTimelineBlock[]
-): CoworkerConversationToolApproval | null {
-  for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-    const block = blocks[blockIndex];
-    if (!block || block.kind !== "events") {
-      continue;
-    }
-
-    for (let eventIndex = block.events.length - 1; eventIndex >= 0; eventIndex -= 1) {
-      const approval = block.events[eventIndex]?.summary.approval;
-      if (approval) {
-        return approval;
-      }
-    }
+function getNextToolStatus(
+  type: string,
+  current: CoworkerConversationToolStatus
+): CoworkerConversationToolStatus {
+  if (type === "tool-result") {
+    return "done";
   }
-
-  return null;
+  if (type === "tool-call-approval") {
+    return "awaiting-approval";
+  }
+  if (type === "tool-call" || type === "tool-call-input-streaming-end") {
+    return current === "awaiting-approval" ? current : "input-ready";
+  }
+  if (type === "error") {
+    return "error";
+  }
+  return current === "awaiting-approval" ? current : "input-streaming";
 }
 
-export function hasCoworkerConversationApproval(
-  block: CoworkerConversationTimelineBlock,
-  approval: CoworkerConversationToolApproval
-) {
+function isSameTextPart(currentTextId: string | null, nextTextId: string | null) {
+  return currentTextId === nextTextId || currentTextId === null || nextTextId === null;
+}
+
+function isToolLifecycleEvent(type: string) {
   return (
-    block.kind === "events" &&
-    block.events.some(
-      (event) =>
-        event.summary.approval?.toolCallId === approval.toolCallId &&
-        event.summary.approval.runId === approval.runId
-    )
+    type === "tool-call-input-streaming-start" ||
+    type === "tool-call-delta" ||
+    type === "tool-call-input-streaming-end" ||
+    type === "tool-call" ||
+    type === "tool-call-approval" ||
+    type === "tool-result"
   );
+}
+
+function isIgnoredControlEvent(type: string) {
+  return (
+    type === "drawless-run" ||
+    type === "start" ||
+    type === "step-start" ||
+    type === "step-finish" ||
+    type === "text-start" ||
+    type === "finish"
+  );
+}
+
+function parseArgsText(argsText: string) {
+  if (!argsText.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(argsText) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function getTextId(event: unknown) {
+  const payload = getObjectField(event, "payload");
+  return getStringField(payload, "id") ?? getStringField(event, "id");
+}
+
+function getToolCallId(event: unknown) {
+  const payload = getObjectField(event, "payload");
+  return (
+    getStringField(payload, "toolCallId") ??
+    getStringField(payload, "id") ??
+    getStringField(event, "toolCallId") ??
+    getStringField(event, "id")
+  );
+}
+
+function getToolName(event: unknown) {
+  const payload = getObjectField(event, "payload");
+  return (
+    getStringField(payload, "toolName") ??
+    getStringField(payload, "name") ??
+    getStringField(event, "toolName") ??
+    getStringField(event, "name")
+  );
+}
+
+function getArgsTextDelta(event: unknown) {
+  const payload = getObjectField(event, "payload");
+  return getStringField(payload, "argsTextDelta") ?? getStringField(event, "argsTextDelta");
+}
+
+function getToolArgs(event: unknown) {
+  const payload = getObjectField(event, "payload");
+  return (
+    getUnknownField(payload, "args") ??
+    getUnknownField(payload, "input") ??
+    getUnknownField(event, "args") ??
+    getUnknownField(event, "input")
+  );
+}
+
+function getToolResult(event: unknown) {
+  const payload = getObjectField(event, "payload");
+  return (
+    getUnknownField(payload, "result") ??
+    getUnknownField(payload, "output") ??
+    getUnknownField(event, "result") ??
+    getUnknownField(event, "output")
+  );
+}
+
+function getObjectField(input: unknown, key: string) {
+  if (!input || typeof input !== "object" || !(key in input)) {
+    return null;
+  }
+
+  const value = (input as Record<string, unknown>)[key];
+  return value && typeof value === "object" ? value : null;
+}
+
+function getUnknownField(input: unknown, key: string) {
+  if (!input || typeof input !== "object" || !(key in input)) {
+    return null;
+  }
+
+  return (input as Record<string, unknown>)[key];
+}
+
+function getStringField(input: unknown, key: string) {
+  if (!input || typeof input !== "object" || !(key in input)) {
+    return null;
+  }
+
+  const value = (input as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
 }

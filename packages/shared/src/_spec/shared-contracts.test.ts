@@ -71,7 +71,8 @@ describe("drawless shared contracts", () => {
     expect(startRequest).toMatchObject({
       serverUrl: "http://127.0.0.1:3001",
       waitUntilLoaded: true,
-      timeoutMs: 8000
+      timeoutMs: 8000,
+      sendIntroCursorChat: false
     });
     expect(
       coworkerStartRequestSchema.safeParse({
@@ -144,9 +145,10 @@ describe("drawless shared contracts", () => {
     expect(
       serverCoworkerStartRequestSchema.parse({
         displayName: "Drawless Coworker",
-        waitUntilLoaded: false
+        waitUntilLoaded: false,
+        sendIntroCursorChat: true
       })
-    ).toMatchObject({ waitUntilLoaded: false });
+    ).toMatchObject({ waitUntilLoaded: false, sendIntroCursorChat: true });
 
   });
 

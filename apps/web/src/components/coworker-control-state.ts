@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { DrawlessServerCoworkerStartRequest } from "@drawless/shared";
 
 import {
   createCoworkerControlClient,
@@ -22,15 +23,23 @@ export type CoworkerControlState = {
   /** 当前 coworker 控制视图状态。 */
   view: CoworkerControlView;
   /** 显式查询 coworker 状态。 */
-  refresh: () => void;
+  refresh: () => Promise<CoworkerControlView>;
   /** 显式请求 coworker 进入 room。 */
-  start: () => void;
+  start: (
+    request?: DrawlessServerCoworkerStartRequest
+  ) => Promise<CoworkerControlView>;
   /** 显式请求 coworker 离开 room。 */
-  stop: () => void;
+  stop: () => Promise<CoworkerControlView>;
 };
 
 type CoworkerControlAction = "status" | "start" | "stop";
 
+/**
+ * 把顶部栏、入场弹窗和后续调试按钮统一接到同一套 coworker 控制面。
+ *
+ * 这里不直接连接 coworker 服务，而是永远经过 drawless server；
+ * server 负责开关、baseUrl、超时和跨端契约校验，web 只保留用户意图。
+ */
 export function useCoworkerControl(roomId: string): CoworkerControlState {
   const [view, setView] = useState<CoworkerControlView>({
     label: "Coworker idle",
@@ -50,7 +59,11 @@ export function useCoworkerControl(roomId: string): CoworkerControlState {
     [roomId]
   );
 
-  const runAction = (action: CoworkerControlAction) => {
+  const runAction = (
+    action: CoworkerControlAction,
+    startRequest?: DrawlessServerCoworkerStartRequest
+  ): Promise<CoworkerControlView> => {
+    // 所有动作先进入 loading 态，避免弹窗和顶部栏同时触发时出现两个并发 UI 状态。
     setView((current) => ({
       ...current,
       label: action === "start" ? "Coworker entering" : "Coworker checking",
@@ -61,35 +74,46 @@ export function useCoworkerControl(roomId: string): CoworkerControlState {
 
     const request =
       action === "start"
-        ? client.start({ waitUntilLoaded: true, timeoutMs: 10_000 })
+        ? client.start({
+            // 默认等待 coworker 完成首次 room hydration；调用方仍可覆盖，例如测试或快速控制按钮。
+            waitUntilLoaded: true,
+            timeoutMs: 10_000,
+            ...startRequest
+          })
         : action === "stop"
           ? client.stop()
           : client.status();
 
-    request
+    return request
       .then((result) => {
+        const nextView = result.ok
+          ? createCoworkerSuccessView(result.value, action)
+          : createCoworkerErrorView(result.error);
         if (!result.ok) {
-          setView(createCoworkerErrorView(result.error));
-          return;
+          // Result 风格的业务错误已经带有 code/message，统一转成顶部栏可读状态。
+          setView(nextView);
+          return nextView;
         }
 
-        setView(createCoworkerSuccessView(result.value, action));
+        setView(nextView);
+        return nextView;
       })
       .catch((error: unknown) => {
-        setView(
-          createCoworkerErrorView({
-            code: "HTTP_ERROR",
-            message: error instanceof Error ? error.message : String(error),
-            raw: error
-          })
-        );
+        // fetch 级异常、JSON 解析异常等兜底成 HTTP_ERROR，避免 React 事件链抛出未处理异常。
+        const nextView = createCoworkerErrorView({
+          code: "HTTP_ERROR",
+          message: error instanceof Error ? error.message : String(error),
+          raw: error
+        });
+        setView(nextView);
+        return nextView;
       });
   };
 
   return {
     view,
     refresh: () => runAction("status"),
-    start: () => runAction("start"),
+    start: (request) => runAction("start", request),
     stop: () => runAction("stop")
   };
 }
@@ -98,6 +122,7 @@ function createCoworkerSuccessView(
   value: unknown,
   action: CoworkerControlAction
 ): CoworkerControlView {
+  // coworker status 是跨服务响应；这里保持宽松读取，再由 UI 映射成少量稳定状态。
   if (
     value &&
     typeof value === "object" &&
@@ -134,6 +159,7 @@ function createCoworkerSuccessView(
 function createCoworkerErrorView(
   error: CoworkerControlError
 ): CoworkerControlView {
+  // disabled 是部署配置状态，不应展示成普通失败，方便本地开发时判断是否没开 COWORKER_ENABLED。
   const disabled = error.message.toLowerCase().includes("disabled");
   return {
     label: disabled ? "Coworker disabled" : "Coworker error",
