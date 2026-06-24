@@ -115,8 +115,7 @@ export function createDrawlessCoworkerRoomClient(
   );
   const presence = atom<TLInstancePresence | null>('drawless-coworker-presence', null);
   const presenceMode = atom<TLPresenceMode>('drawless-coworker-presence-mode', 'full');
-  // 已经处理过的用户 cursor chat。tldraw 会把同一句 chatMessage 保留一小段时间，
-  // 如果不去重，coworker 会在这段时间内反复回复同一句话。
+  // 已经处理过的用户 cursor chat。这里只保留最近窗口，避免长期运行时按历史消息无限增长。
   const handledCursorChats = new Set<string>();
   // 按远端 presence id 做防抖。用户输入 cursor chat 时，chatMessage 会随着打字不断变化；
   // 这里等输入稳定一小会儿，再交给上层决定是否回复。
@@ -308,7 +307,7 @@ function scheduleCursorChatObservation(input: {
   // cursor chat 会随着用户输入不断更新；稍微等一下，避免用户每敲一个字 coworker 都回复。
   const timer = setTimeout(() => {
     input.timers.delete(input.presenceRecord.id);
-    input.handledCursorChats.add(chatKey);
+    rememberCursorChat(input.handledCursorChats, chatKey);
     // room client 只负责把 tldraw presence 变化翻译成观察事件。
     // 是否回复、如何回复交给上层 AI handler，避免协同传输层夹带业务策略。
     input.onCursorChat?.({
@@ -325,6 +324,19 @@ function scheduleCursorChatObservation(input: {
   }, 3000);
 
   input.timers.set(input.presenceRecord.id, timer);
+}
+
+const HANDLED_CURSOR_CHAT_LIMIT = 200;
+
+function rememberCursorChat(handledCursorChats: Set<string>, chatKey: string) {
+  handledCursorChats.add(chatKey);
+  while (handledCursorChats.size > HANDLED_CURSOR_CHAT_LIMIT) {
+    const oldest = handledCursorChats.values().next().value as string | undefined;
+    if (!oldest) {
+      break;
+    }
+    handledCursorChats.delete(oldest);
+  }
 }
 
 function publishCoworkerCursorChat(input: {
