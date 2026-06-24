@@ -46,6 +46,8 @@ type CoworkerRoomEntry = {
   startedAt: string;
   /** 当前 room client 最近一次状态更新时间。 */
   updatedAt: string;
+  /** 当前 room 的空闲回收 timer。 */
+  idleTimer: ReturnType<typeof setTimeout> | null;
 };
 
 /**
@@ -76,7 +78,9 @@ export class DrawlessCoworkerRoomRegistry {
     }
 
     // error/stopped entry 不复用，避免一个坏连接继续占着 room 生命周期。
-    existing?.client.close();
+    if (existing) {
+      this.disposeEntry(roomId, existing);
+    }
     const now = new Date().toISOString();
     let entry!: CoworkerRoomEntry;
     let introCursorChatSent = false;
@@ -99,7 +103,7 @@ export class DrawlessCoworkerRoomRegistry {
         entry.status = 'online';
         entry.snapshot = snapshot;
         entry.lastError = null;
-        entry.updatedAt = new Date().toISOString();
+        this.touchEntry(roomId, entry);
         sendIntroCursorChatsOnce();
       },
       onRemoteChange: (snapshot, changedRecordIds) => {
@@ -110,17 +114,17 @@ export class DrawlessCoworkerRoomRegistry {
           changedRecordIds,
           entry.recentlyChangedRecordIds
         );
-        entry.updatedAt = new Date().toISOString();
+        this.touchEntry(roomId, entry);
       },
       onCursorChat: (event) => {
         // cursor chat 不落库，不变成第二套对话事实源；这里只触发一次临时 AI 回复。
-        entry.updatedAt = new Date().toISOString();
+        this.touchEntry(roomId, entry);
         console.info(
           `[drawless coworker] observed cursor chat in ${roomId} from ${event.userName}: ${event.message}`
         );
         void replyToCursorChat({ client, event, agent: this.cursorChatReplyAgent })
           .then(() => {
-            entry.updatedAt = new Date().toISOString();
+            this.touchEntry(roomId, entry);
           })
           .catch((error) => {
             console.warn('[drawless coworker] cursor chat reply failed', error);
@@ -129,7 +133,7 @@ export class DrawlessCoworkerRoomRegistry {
       onSyncError: (reason) => {
         entry.status = 'error';
         entry.lastError = reason;
-        entry.updatedAt = new Date().toISOString();
+        this.touchEntry(roomId, entry);
       },
     });
 
@@ -141,9 +145,11 @@ export class DrawlessCoworkerRoomRegistry {
       recentlyChangedRecordIds: [],
       startedAt: now,
       updatedAt: now,
+      idleTimer: null,
     };
     // 先登记 entry，再等待 hydration；这样 status 路由能立刻看到 starting 状态。
     this.entries.set(roomId, entry);
+    this.scheduleIdleCleanup(roomId, entry, COWORKER_ROOM_IDLE_TTL_MS);
 
     if (request.waitUntilLoaded) {
       await this.waitForExistingIfNeeded(entry, request);
@@ -225,6 +231,10 @@ export class DrawlessCoworkerRoomRegistry {
   ) {
     const request = coworkerConversationStreamRequestSchema.parse(requestInput);
     const roomId = parseRoomIdOrThrow(request.roomId);
+    const entry = this.entries.get(roomId);
+    if (entry) {
+      this.touchEntry(roomId, entry);
+    }
 
     return this.cursorChatReplyAgent.stream(createConversationPrompt(request), {
       activeTools: ['collect-canvas-context', 'edit-canvas'],
@@ -272,11 +282,9 @@ export class DrawlessCoworkerRoomRegistry {
       };
     }
 
-    entry.client.close();
+    this.disposeEntry(roomId, entry);
     entry.status = 'stopped';
     entry.updatedAt = new Date().toISOString();
-    // stop 后释放本地引用；下一次 start 会以新的 sync client 重新进入 room。
-    this.entries.delete(roomId);
 
     return {
       roomId,
@@ -301,14 +309,53 @@ export class DrawlessCoworkerRoomRegistry {
       );
       entry.status = 'online';
       entry.lastError = null;
-      entry.updatedAt = new Date().toISOString();
+      this.touchEntry(entry.client.identity.roomId, entry);
     } catch (error) {
-      // 超时不立刻销毁 client；它可能仍会在稍后完成加载，状态会由回调继续修正。
       entry.lastError = error instanceof Error ? error.message : String(error);
-      if (entry.status !== 'starting') {
+      if (entry.status === 'starting') {
+        // 启动超时说明本次常驻 client 没有完成可用生命周期，立即释放，避免失败房间长期占用内存。
         entry.status = 'error';
+        this.disposeEntry(entry.client.identity.roomId, entry);
+      } else {
+        entry.status = 'error';
+        this.touchEntry(entry.client.identity.roomId, entry);
       }
-      entry.updatedAt = new Date().toISOString();
+    }
+  }
+
+  private touchEntry(roomId: DrawlessRoomId, entry: CoworkerRoomEntry) {
+    entry.updatedAt = new Date().toISOString();
+    this.scheduleIdleCleanup(roomId, entry, COWORKER_ROOM_IDLE_TTL_MS);
+  }
+
+  private scheduleIdleCleanup(
+    roomId: DrawlessRoomId,
+    entry: CoworkerRoomEntry,
+    timeoutMs: number
+  ) {
+    if (entry.idleTimer) {
+      clearTimeout(entry.idleTimer);
+    }
+
+    entry.idleTimer = setTimeout(() => {
+      if (this.entries.get(roomId) !== entry) {
+        return;
+      }
+      console.info(`[drawless coworker] stop idle room ${roomId}`);
+      this.disposeEntry(roomId, entry);
+    }, timeoutMs);
+    entry.idleTimer.unref?.();
+  }
+
+  private disposeEntry(roomId: DrawlessRoomId, entry: CoworkerRoomEntry) {
+    if (entry.idleTimer) {
+      clearTimeout(entry.idleTimer);
+      entry.idleTimer = null;
+    }
+    entry.client.close();
+    // stop 后释放本地引用；下一次 start 会以新的 sync client 重新进入 room。
+    if (this.entries.get(roomId) === entry) {
+      this.entries.delete(roomId);
     }
   }
 
@@ -354,6 +401,8 @@ const INTRO_CURSOR_CHAT_INITIAL_DELAY_MS = 800;
 const INTRO_CURSOR_CHAT_INTERVAL_MS = 2400;
 // 默认把入场光标放在首屏画布内，避开左上工具栏和右侧样式面板。
 const INTRO_CURSOR_CHAT_CURSOR = { x: 220, y: 180 };
+// coworker 是协同验证壳层，长时间无人触发时自动离开，避免每个 room 永久持有 TLStore。
+const COWORKER_ROOM_IDLE_TTL_MS = 30 * 60 * 1000;
 
 async function sendIntroCursorChats(client: DrawlessCoworkerRoomClient) {
   // 首次入场时稍等一拍，给 web 端协作者列表和 presence overlay 留出渲染时间。

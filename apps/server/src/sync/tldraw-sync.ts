@@ -57,12 +57,27 @@ export function attachTldrawSyncSocket(
   }
 
   const room = registry.getOrCreateRoom(roomId.value);
+  const releaseRoomConnection = registry.registerConnection(roomId.value);
+  const releaseOnce = once(releaseRoomConnection);
+  socket.once("close", releaseOnce);
+  socket.once("error", releaseOnce);
   room.handleSocketConnect({
     sessionId: sessionId.value,
     socket: toMinimalWebSocket(socket)
   });
 
   return { ok: true, roomId: roomId.value, sessionId: sessionId.value };
+}
+
+function once(callback: () => void) {
+  let called = false;
+  return () => {
+    if (called) {
+      return;
+    }
+    called = true;
+    callback();
+  };
 }
 
 /**
