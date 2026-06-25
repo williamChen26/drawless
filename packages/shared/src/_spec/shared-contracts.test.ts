@@ -242,39 +242,21 @@ describe("drawless shared contracts", () => {
       roomId: "alpha",
       currentPageId: "page:page",
       focusedRecordIds: ["shape:goal"],
-      cursor: { x: 120, y: 240 },
-      maxNodes: 60
+      cursor: { x: 120, y: 240 }
     });
 
     expect(request.focusedRecordIds).toEqual(["shape:goal"]);
     expect(
       canvasContextRequestSchema.safeParse({
         roomId: "alpha",
-        maxNodes: 1
+        cursor: { x: 120 }
       }).success
     ).toBe(false);
-
     const context = canvasContextSnapshotSchema.parse({
-      roomId: "alpha",
       available: true,
-      capturedAt: "2026-06-11T00:00:00.000Z",
       currentPageId: "page:page",
-      summary: {
-        roomId: "alpha",
-        capturedAt: "2026-06-11T00:00:00.000Z",
-        currentPageId: "page:page",
-        summary: "画布包含 1 个 shape。",
-        focus: {
-          selectedRecordIds: ["shape:goal"],
-          recentlyChangedRecordIds: ["shape:goal"],
-          viewportRecordIds: ["shape:goal"]
-        },
-        recentEvents: []
-      },
+      summaryText: "画布包含 1 个 shape。",
       semanticGraph: {
-        roomId: "alpha",
-        generatedAt: "2026-06-11T00:00:00.000Z",
-        currentPageId: "page:page",
         nodes: [
           {
             id: "shape:goal",
@@ -295,10 +277,12 @@ describe("drawless shared contracts", () => {
         nearbyRecordIds: ["shape:goal"],
         recentlyChangedRecordIds: ["shape:goal"]
       },
+      recentEvents: [],
       warnings: []
     });
 
     expect(context.available).toBe(true);
+    expect(context.summaryText).toBe("画布包含 1 个 shape。");
     expect(context.semanticGraph?.nodes[0]?.text).toBe("项目目标");
   });
 
@@ -314,7 +298,7 @@ describe("drawless shared contracts", () => {
           shapeKind: "rectangle",
           text: "开始",
           bounds: { x: 0, y: 0, w: 140, h: 80 },
-          style: { color: "blue", fill: "semi", size: "m" }
+          styleRole: "start"
         },
         {
           operationId: "op-2",
@@ -322,26 +306,23 @@ describe("drawless shared contracts", () => {
           from: { x: 140, y: 40 },
           to: { x: 240, y: 40 },
           startBinding: {
-            operationId: "op-1",
-            normalizedAnchor: { x: 1, y: 0.5 },
-            snap: "edge"
+            operationId: "op-1"
           },
           endBinding: {
-            shapeId: "shape:target",
-            normalizedAnchor: { x: 0, y: 0.5 }
-          }
+            shapeId: "shape:target"
+          },
+          styleRole: "step"
         }
       ]
     });
 
-    expect(request.executionMode).toBe("performed");
     expect(request.operations).toHaveLength(2);
     expect(request.operations[1]).toMatchObject({
       kind: "create_arrow",
       startBinding: {
-        operationId: "op-1",
-        snap: "edge"
-      }
+        operationId: "op-1"
+      },
+      styleRole: "step"
     });
     expect(
       canvasEditRequestSchema.safeParse({
@@ -359,14 +340,27 @@ describe("drawless shared contracts", () => {
     expect(
       canvasEditRequestSchema.safeParse({
         ...request,
-        executionMode: "instant",
         operations: [
           {
             operationId: "op-bad-binding",
             kind: "create_arrow",
             from: { x: 0, y: 0 },
             to: { x: 100, y: 0 },
-            startBinding: { normalizedAnchor: { x: 0.5, y: 0.5 } }
+            startBinding: {}
+          }
+        ]
+      }).success
+    ).toBe(false);
+    expect(
+      canvasEditRequestSchema.safeParse({
+        ...request,
+        operations: [
+          {
+            operationId: "op-bad-role",
+            kind: "create_shape",
+            shapeKind: "rectangle",
+            bounds: { x: 0, y: 0, w: 100, h: 60 },
+            styleRole: "brand"
           }
         ]
       }).success
@@ -378,7 +372,6 @@ describe("drawless shared contracts", () => {
         applied: true,
         createdRecordIds: ["shape:one"],
         updatedRecordIds: [],
-        deletedRecordIds: [],
         warnings: [],
         summary: "coworker 已写入画布。"
       })

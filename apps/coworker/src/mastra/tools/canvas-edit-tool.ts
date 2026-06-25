@@ -21,7 +21,7 @@ export function setCanvasEditExecutor(executor: CanvasEditExecutor) {
 export const canvasEditTool = createTool({
   id: 'edit-canvas',
   description:
-    'Apply a user-approved, bounded edit plan to the current drawless tldraw canvas through the coworker collaborative TLStore. Use it only when the user explicitly asks to draw, create, move, resize, connect, or update canvas objects. Prefer arrow startBinding/endBinding when connecting shapes. By default the coworker performs the edit step by step with live presence. It requires approval before execution.',
+    'Apply a user-approved, bounded edit plan to the current drawless tldraw canvas through the coworker collaborative TLStore. Use it only when the user explicitly asks to draw, create, move, resize, connect, or update canvas objects. Prefer arrow startBinding/endBinding when connecting shapes. Use styleRole for semantic visual intent such as start, step, decision, success, error, or note; do not invent low-level tldraw style fields. By default the coworker performs the edit step by step with live presence. It requires approval before execution.',
   inputSchema: canvasEditRequestSchema,
   outputSchema: canvasEditResultSchema,
   requireApproval: true,

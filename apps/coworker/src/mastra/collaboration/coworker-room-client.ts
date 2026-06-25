@@ -28,8 +28,6 @@ import {
   type DrawlessSessionId,
 } from '../../../../../packages/shared/src/index';
 import {
-  applyCanvasEditToStore,
-  getCanvasEditExecutionMode,
   performCanvasEditToStore,
   type CanvasEditPresencePatch,
 } from '../tools/canvas-edit-executor';
@@ -249,9 +247,7 @@ export function createDrawlessCoworkerRoomClient(
             },
           };
 
-          return getCanvasEditExecutionMode(request) === 'instant'
-            ? applyCanvasEditToStore(input)
-            : performCanvasEditToStore(input);
+          return performCanvasEditToStore(input);
         } finally {
           collaborationMode.set(previousMode);
         }

@@ -96,6 +96,7 @@ function toMinimalWebSocket(socket: WebSocket): WebSocketMinimal {
     (event: unknown) => void,
     { type: "message" | "close" | "error"; wrapped: (...args: unknown[]) => void }
   >();
+  let terminalEventDispatched = false;
 
   return {
     get readyState() {
@@ -112,6 +113,14 @@ function toMinimalWebSocket(socket: WebSocket): WebSocketMinimal {
         if (type === "message") {
           listener({ data: normalizeMessageData(args[0]) });
           return;
+        }
+        if (type === "close" || type === "error") {
+          // Node ws 可能先发 error 再发 close；sync-core 两条路径都会 cancel session。
+          // 这里只把第一个终止事件交给 sync-core，避免重复取消同一个 session 造成日志噪音。
+          if (terminalEventDispatched) {
+            return;
+          }
+          terminalEventDispatched = true;
         }
         listener(args[0] ?? {});
       };
