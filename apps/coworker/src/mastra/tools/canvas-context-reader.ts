@@ -2,14 +2,13 @@ import type { TLInstancePresence, TLRecord, TLShape } from 'tldraw';
 
 import {
   canvasContextSnapshotSchema,
-  canvasSemanticGraphSchema,
   canvasSummarySchema,
   type DrawlessCanvasBounds,
   type DrawlessCanvasContextRequest,
+  type DrawlessCanvasContextSemanticGraph,
   type DrawlessCanvasContextSnapshot,
   type DrawlessCanvasObservationEvent,
   type DrawlessCanvasSemanticEdge,
-  type DrawlessCanvasSemanticGraph,
   type DrawlessCanvasSemanticNode,
   type DrawlessCanvasSemanticNodeKind,
   type DrawlessCanvasSemanticRegion,
@@ -85,11 +84,8 @@ export function createCanvasContextSnapshot(
     viewportRecordIds,
   });
   const { graph, warnings } = createCanvasSemanticGraph({
-    roomId: input.roomId,
     records: input.records,
-    capturedAt,
-    currentPageId,
-    maxNodes: input.request.maxNodes ?? DEFAULT_MAX_NODES,
+    maxNodes: DEFAULT_MAX_NODES,
     priorityRecordIds: [
       ...focusedRecordIds,
       ...selectedRecordIds,
@@ -99,11 +95,9 @@ export function createCanvasContextSnapshot(
   });
 
   return canvasContextSnapshotSchema.parse({
-    roomId: input.roomId,
     available: true,
-    capturedAt,
     currentPageId,
-    summary,
+    summaryText: summary.summary,
     semanticGraph: graph,
     focus: {
       selectedRecordIds,
@@ -111,6 +105,7 @@ export function createCanvasContextSnapshot(
       nearbyRecordIds,
       recentlyChangedRecordIds,
     },
+    recentEvents: summary.recentEvents,
     warnings,
   });
 }
@@ -122,11 +117,9 @@ export function createUnavailableCanvasContextSnapshot(input: {
   reason: string;
 }): DrawlessCanvasContextSnapshot {
   return canvasContextSnapshotSchema.parse({
-    roomId: input.roomId,
     available: false,
-    capturedAt: new Date().toISOString(),
     currentPageId: null,
-    summary: null,
+    summaryText: null,
     semanticGraph: null,
     focus: {
       selectedRecordIds: [],
@@ -134,6 +127,7 @@ export function createUnavailableCanvasContextSnapshot(input: {
       nearbyRecordIds: [],
       recentlyChangedRecordIds: [],
     },
+    recentEvents: [],
     warnings: [input.reason],
   });
 }
@@ -178,13 +172,10 @@ function createCanvasSummary(input: {
 }
 
 function createCanvasSemanticGraph(input: {
-  roomId: DrawlessRoomId;
   records: TLRecord[];
-  capturedAt: string;
-  currentPageId: string | null;
   maxNodes: number;
   priorityRecordIds: string[];
-}): { graph: DrawlessCanvasSemanticGraph; warnings: string[] } {
+}): { graph: DrawlessCanvasContextSemanticGraph; warnings: string[] } {
   const shapes = input.records.filter(isShapeRecord);
   const shapesById = new Map(shapes.map((shape) => [shape.id, shape]));
   const priorityIds = new Set(uniqueNonEmptyStrings(input.priorityRecordIds));
@@ -205,14 +196,11 @@ function createCanvasSemanticGraph(input: {
       : [];
 
   return {
-    graph: canvasSemanticGraphSchema.parse({
-      roomId: input.roomId,
-      generatedAt: input.capturedAt,
-      currentPageId: input.currentPageId,
+    graph: {
       nodes,
       edges,
       regions,
-    }),
+    },
     warnings,
   };
 }

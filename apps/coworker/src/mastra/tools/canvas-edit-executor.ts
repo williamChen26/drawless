@@ -20,13 +20,11 @@ import type {
   DrawlessCanvasEditArrowBindingTarget,
   DrawlessCanvasEditCreateArrowOperation,
   DrawlessCanvasEditCreateShapeOperation,
-  DrawlessCanvasEditExecutionMode,
   DrawlessCanvasEditOperation,
   DrawlessCanvasEditRequest,
   DrawlessCanvasEditResult,
-  DrawlessCanvasEditStyle,
+  DrawlessCanvasEditStyleRole,
   DrawlessCanvasEditableShapeKind,
-  DrawlessCanvasNormalizedPoint,
   DrawlessCanvasPoint,
   DrawlessRoomId,
 } from '../../../../../packages/shared/src/index';
@@ -90,54 +88,11 @@ const MIN_SHAPE_SIZE = 12;
 const MAX_SHAPE_SIZE = 4_000;
 const DEFAULT_GEO_SIZE = 120;
 const DEFAULT_TEXT_WIDTH = 220;
+const DEFAULT_SHAPE_SIZE = 'm';
+const DEFAULT_ARROW_BINDING_ANCHOR = { x: 0.5, y: 0.5 };
 const PERFORMED_FRAME_COUNT = 5;
 const PERFORMED_FRAME_DELAY_MS = 70;
 const PERFORMED_STEP_DELAY_MS = 120;
-
-export function applyCanvasEditToStore(input: ApplyCanvasEditInput): DrawlessCanvasEditResult {
-  const context = createApplyContext(input);
-  const createdRecordIds: string[] = [];
-  const updatedRecordIds = new Set<string>();
-  const warnings: string[] = [];
-  const recordsToPut: TLRecord[] = [];
-
-  for (const operation of input.request.operations) {
-    const result = applyOperation({
-      ...context,
-      operation,
-    });
-
-    mergeOperationResult({
-      result,
-      createdRecordIds,
-      updatedRecordIds,
-      warnings,
-    });
-    recordsToPut.push(...result.recordsToPut);
-    rememberCreatedShape(context, operation.operationId, result.createdShapeId);
-  }
-
-  try {
-    if (recordsToPut.length > 0) {
-      input.store.put(recordsToPut);
-    }
-  } catch (error) {
-    return createFailedCanvasEditResult({
-      request: input.request,
-      warnings,
-      createdRecordIds: [],
-      updatedRecordIds: [],
-      reason: `写入 tldraw store 失败：${error instanceof Error ? error.message : String(error)}`,
-    });
-  }
-
-  return createCanvasEditResult({
-    request: input.request,
-    createdRecordIds,
-    updatedRecordIds: [...updatedRecordIds],
-    warnings,
-  });
-}
 
 export async function performCanvasEditToStore(
   input: ApplyCanvasEditInput
@@ -188,12 +143,6 @@ export async function performCanvasEditToStore(
     updatedRecordIds: [...updatedRecordIds],
     warnings,
   });
-}
-
-export function getCanvasEditExecutionMode(
-  request: DrawlessCanvasEditRequest
-): DrawlessCanvasEditExecutionMode {
-  return request.executionMode ?? 'performed';
 }
 
 function createApplyContext(input: ApplyCanvasEditInput): CanvasEditApplyContext {
@@ -287,24 +236,6 @@ async function performOperation(input: {
   }
 }
 
-function createFailedCanvasEditResult(input: {
-  request: DrawlessCanvasEditRequest;
-  createdRecordIds: string[];
-  updatedRecordIds: string[];
-  warnings: string[];
-  reason: string;
-}): DrawlessCanvasEditResult {
-  return {
-    roomId: input.request.roomId,
-    applied: input.createdRecordIds.length > 0 || input.updatedRecordIds.length > 0,
-    createdRecordIds: input.createdRecordIds,
-    updatedRecordIds: input.updatedRecordIds,
-    deletedRecordIds: [],
-    warnings: [...input.warnings, input.reason],
-    summary: input.reason,
-  };
-}
-
 function createCanvasEditResult(input: {
   request: DrawlessCanvasEditRequest;
   createdRecordIds: string[];
@@ -318,7 +249,6 @@ function createCanvasEditResult(input: {
     applied,
     createdRecordIds: input.createdRecordIds,
     updatedRecordIds: input.updatedRecordIds,
-    deletedRecordIds: [],
     warnings: input.warnings,
     summary: createResultSummary({
       request: input.request,
@@ -340,47 +270,9 @@ export function createUnavailableCanvasEditResult(input: {
     applied: false,
     createdRecordIds: [],
     updatedRecordIds: [],
-    deletedRecordIds: [],
     warnings: [input.reason],
     summary: input.reason,
   };
-}
-
-function applyOperation(input: CanvasEditApplyContext & {
-  operation: DrawlessCanvasEditOperation;
-}): CanvasEditOperationResult {
-  switch (input.operation.kind) {
-    case 'create_shape':
-      return createShapeOperation({
-        request: input.request,
-        operation: input.operation,
-        pageId: input.pageId,
-        index: input.nextIndex(),
-      });
-    case 'create_arrow':
-      return createArrowOperation({
-        context: input,
-        request: input.request,
-        operation: input.operation,
-        pageId: input.pageId,
-        index: input.nextIndex(),
-      });
-    case 'update_shape_text':
-      return updateShapeTextOperation({
-        store: input.store,
-        operation: input.operation,
-      });
-    case 'move_shape':
-      return moveShapeOperation({
-        store: input.store,
-        operation: input.operation,
-      });
-    case 'resize_shape':
-      return resizeShapeOperation({
-        store: input.store,
-        operation: input.operation,
-      });
-  }
 }
 
 function createShapeOperation(input: {
@@ -427,7 +319,7 @@ function createGeoShape(input: {
     w: DEFAULT_GEO_SIZE,
     h: DEFAULT_GEO_SIZE,
   });
-  const style = normalizeStyle(input.operation.style);
+  const style = resolveStyleRole(input.operation.styleRole);
 
   return {
     id: input.id,
@@ -451,7 +343,7 @@ function createGeoShape(input: {
       labelColor: style.color,
       color: style.color,
       fill: style.fill,
-      size: style.size,
+      size: DEFAULT_SHAPE_SIZE,
       font: 'draw',
       align: 'middle',
       verticalAlign: 'middle',
@@ -472,7 +364,7 @@ function createTextShape(input: {
     w: DEFAULT_TEXT_WIDTH,
     h: MIN_SHAPE_SIZE,
   });
-  const style = normalizeStyle(input.operation.style);
+  const style = resolveStyleRole(input.operation.styleRole);
 
   return {
     id: input.id,
@@ -487,7 +379,7 @@ function createTextShape(input: {
     opacity: 1,
     props: {
       color: style.color,
-      size: style.size,
+      size: DEFAULT_SHAPE_SIZE,
       font: 'draw',
       textAlign: 'start',
       w: bounds.w,
@@ -509,7 +401,7 @@ function createArrowOperation(input: {
   const shapeId = createShapeId();
   const from = normalizePoint(input.operation.from);
   const to = normalizePoint(input.operation.to);
-  const style = normalizeStyle(input.operation.style);
+  const style = resolveStyleRole(input.operation.styleRole);
   const warnings: string[] = [];
   const record: TLArrowShape = {
     id: shapeId,
@@ -528,7 +420,7 @@ function createArrowOperation(input: {
       color: style.color,
       fill: style.fill,
       dash: 'draw',
-      size: style.size,
+      size: DEFAULT_SHAPE_SIZE,
       arrowheadStart: 'none',
       arrowheadEnd: 'arrow',
       font: 'draw',
@@ -601,8 +493,6 @@ function createArrowBindingRecord(input: {
     return { record: null, warning: targetShapeId.warning };
   }
 
-  const anchor = normalizeAnchor(input.target.normalizedAnchor);
-
   return {
     record: {
       id: createBindingId(),
@@ -612,10 +502,10 @@ function createArrowBindingRecord(input: {
       toId: targetShapeId.value,
       props: {
         terminal: input.terminal,
-        normalizedAnchor: anchor,
-        isExact: input.target.isExact ?? false,
-        isPrecise: input.target.isPrecise ?? true,
-        snap: input.target.snap ?? 'edge',
+        normalizedAnchor: DEFAULT_ARROW_BINDING_ANCHOR,
+        isExact: false,
+        isPrecise: true,
+        snap: 'edge',
       },
       meta: createDrawlessShapeMeta(input.request, input.operation.operationId),
     } as TLRecord,
@@ -1296,21 +1186,6 @@ function normalizePoint(point: DrawlessCanvasPoint) {
   };
 }
 
-function normalizeAnchor(anchor: DrawlessCanvasNormalizedPoint | undefined) {
-  return {
-    x: clampNormalized(anchor?.x ?? 0.5),
-    y: clampNormalized(anchor?.y ?? 0.5),
-  };
-}
-
-function clampNormalized(value: number) {
-  if (!Number.isFinite(value)) {
-    return 0.5;
-  }
-
-  return Math.min(1, Math.max(0, value));
-}
-
 function normalizeCoordinate(value: number, fallback: number) {
   return Number.isFinite(value) ? value : fallback;
 }
@@ -1322,12 +1197,23 @@ function normalizeSize(value: number, fallback: number) {
   return Math.min(MAX_SHAPE_SIZE, Math.max(MIN_SHAPE_SIZE, value));
 }
 
-function normalizeStyle(style: DrawlessCanvasEditStyle | undefined) {
-  return {
-    color: style?.color ?? 'black',
-    fill: style?.fill ?? 'none',
-    size: style?.size ?? 'm',
-  };
+function resolveStyleRole(role: DrawlessCanvasEditStyleRole | undefined) {
+  switch (role ?? 'default') {
+    case 'start':
+      return { color: 'green', fill: 'semi' };
+    case 'step':
+      return { color: 'blue', fill: 'semi' };
+    case 'decision':
+      return { color: 'yellow', fill: 'semi' };
+    case 'success':
+      return { color: 'green', fill: 'semi' };
+    case 'error':
+      return { color: 'red', fill: 'semi' };
+    case 'note':
+      return { color: 'grey', fill: 'none' };
+    case 'default':
+      return { color: 'black', fill: 'none' };
+  }
 }
 
 function mapEditableShapeKindToGeo(shapeKind: DrawlessCanvasEditableShapeKind) {
