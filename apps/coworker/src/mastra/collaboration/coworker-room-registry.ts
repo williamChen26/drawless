@@ -50,6 +50,36 @@ type CoworkerRoomEntry = {
   idleTimer: ReturnType<typeof setTimeout> | null;
 };
 
+export type DrawlessCoworkerRoomDebugSnapshot = {
+  /** 当前 coworker 进程内还持有的 room 数量。 */
+  count: number;
+  /** 每个 room 的轻量诊断信息，不包含完整 tldraw document。 */
+  items: Array<{
+    /** coworker 所在的协同房间 ID。 */
+    roomId: DrawlessRoomId;
+    /** 当前 room client 生命周期状态。 */
+    status: DrawlessCoworkerRoomSessionStatus;
+    /** 当前 room 是否仍被控制面视为可用 session。 */
+    active: boolean;
+    /** 当前 TLStore 中的 record 总数；读取失败时为 null。 */
+    recordCount: number | null;
+    /** 当前 TLStore 中的 document record 数量；读取失败时为 null。 */
+    documentRecordCount: number | null;
+    /** 当前 TLStore 中的 shape record 数量；读取失败时为 null。 */
+    shapeCount: number | null;
+    /** 当前 TLStore 中的 presence record 数量；读取失败时为 null。 */
+    presenceCount: number | null;
+    /** 最近变化 record ID 窗口的数量。 */
+    recentlyChangedRecordIdCount: number;
+    /** 当前 room client 的启动时间。 */
+    startedAt: string;
+    /** 当前 room client 最近一次状态更新时间。 */
+    updatedAt: string;
+    /** 最近一次启动或同步错误。 */
+    lastError: string | null;
+  }>;
+};
+
 /**
  * 管理 coworker 在各个 room 中的常驻 sync client。
  *
@@ -165,6 +195,30 @@ export class DrawlessCoworkerRoomRegistry {
   getStatus(roomIdInput: string): DrawlessCoworkerRoomStatusResponse {
     const roomId = parseRoomIdOrThrow(roomIdInput);
     return this.createStatusResponse(roomId, this.entries.get(roomId) ?? null);
+  }
+
+  getDebugSnapshot(): DrawlessCoworkerRoomDebugSnapshot {
+    const items = [...this.entries.entries()].map(([roomId, entry]) => {
+      const snapshot = safeGetRoomSnapshot(entry);
+      return {
+        roomId,
+        status: entry.status,
+        active: ['starting', 'online', 'offline'].includes(entry.status),
+        recordCount: snapshot?.recordCount ?? null,
+        documentRecordCount: snapshot?.documentRecordCount ?? null,
+        shapeCount: snapshot?.shapeCount ?? null,
+        presenceCount: snapshot?.presenceCount ?? null,
+        recentlyChangedRecordIdCount: entry.recentlyChangedRecordIds.length,
+        startedAt: entry.startedAt,
+        updatedAt: entry.updatedAt,
+        lastError: entry.lastError,
+      };
+    });
+
+    return {
+      count: items.length,
+      items,
+    };
   }
 
   collectCanvasContext(
@@ -449,6 +503,16 @@ function mergeRecentRecordIds(nextIds: string[], existingIds: string[]) {
     0,
     40
   );
+}
+
+function safeGetRoomSnapshot(
+  entry: CoworkerRoomEntry
+): DrawlessCoworkerRoomSnapshotSummary | null {
+  try {
+    return entry.client.getSnapshot();
+  } catch {
+    return entry.snapshot;
+  }
 }
 
 function parseRoomIdOrThrow(roomId: string) {
