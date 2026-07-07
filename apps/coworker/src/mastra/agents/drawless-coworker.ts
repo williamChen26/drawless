@@ -1,7 +1,14 @@
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
 import { canvasContextTool } from '../tools/canvas-context-tool';
 import { canvasEditTool } from '../tools/canvas-edit-tool';
+
+const coworkerAgentMemoryEnabled = parseBooleanEnv(
+  process.env.COWORKER_AGENT_MEMORY_ENABLED,
+  true
+);
+const coworkerMemory = coworkerAgentMemoryEnabled
+  ? new (await import('@mastra/memory')).Memory()
+  : null;
 
 export const drawlessCoworker = new Agent({
   id: 'drawless-coworker',
@@ -46,5 +53,21 @@ export const drawlessCoworker = new Agent({
     [canvasContextTool.id]: canvasContextTool,
     [canvasEditTool.id]: canvasEditTool,
   },
-  memory: new Memory(),
+  ...(coworkerMemory ? { memory: coworkerMemory } : {}),
 });
+
+function parseBooleanEnv(value: string | undefined, fallback: boolean) {
+  if (!value?.trim()) {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+}
