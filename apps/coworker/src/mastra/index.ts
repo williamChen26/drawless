@@ -8,6 +8,7 @@ import { DrawlessCoworkerRoomRegistry } from './collaboration/coworker-room-regi
 import { createCoworkerRoomApiRoutes } from './routes/coworker-room-routes';
 import { setCanvasContextCollector } from './tools/canvas-context-tool';
 import { setCanvasEditExecutor } from './tools/canvas-edit-tool';
+import { startCoworkerMemoryDebugLogger } from './debug/coworker-memory-debug';
 
 const coworkerObservabilityEnabled = parseBooleanEnv(
   process.env.COWORKER_OBSERVABILITY_ENABLED,
@@ -30,6 +31,7 @@ const registeredDrawlessCoworker = mastra.getAgentById('drawless-coworker');
 const coworkerRoomRegistry = new DrawlessCoworkerRoomRegistry(registeredDrawlessCoworker);
 setCanvasContextCollector((request) => coworkerRoomRegistry.collectCanvasContext(request));
 setCanvasEditExecutor((request) => coworkerRoomRegistry.applyCanvasEdit(request));
+startCoworkerMemoryDebugLogger(coworkerRoomRegistry);
 
 mastra.setServer({
   apiRoutes: createCoworkerRoomApiRoutes(coworkerRoomRegistry),
