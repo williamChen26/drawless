@@ -1,7 +1,11 @@
 import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
 import { canvasContextTool } from '../tools/canvas-context-tool';
 import { canvasEditTool } from '../tools/canvas-edit-tool';
+import { getCoworkerStorageMode } from '../coworker-runtime-config';
+
+const coworkerStorageMode = getCoworkerStorageMode();
+const coworkerMemory =
+  coworkerStorageMode === 'disabled' ? null : new (await import('@mastra/memory')).Memory();
 
 export const drawlessCoworker = new Agent({
   id: 'drawless-coworker',
@@ -46,5 +50,5 @@ export const drawlessCoworker = new Agent({
     [canvasContextTool.id]: canvasContextTool,
     [canvasEditTool.id]: canvasEditTool,
   },
-  memory: new Memory(),
+  ...(coworkerMemory ? { memory: coworkerMemory } : {}),
 });

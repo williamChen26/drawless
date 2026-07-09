@@ -1,10 +1,12 @@
 
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { MastraCompositeStore } from '@mastra/core/storage';
 import { drawlessCoworker } from './agents/drawless-coworker';
 import { DrawlessCoworkerRoomRegistry } from './collaboration/coworker-room-registry';
+import {
+  getCoworkerStorageMode,
+  type CoworkerStorageMode,
+} from './coworker-runtime-config';
 import { createCoworkerRoomApiRoutes } from './routes/coworker-room-routes';
 import { setCanvasContextCollector } from './tools/canvas-context-tool';
 import { setCanvasEditExecutor } from './tools/canvas-edit-tool';
@@ -13,16 +15,18 @@ const coworkerObservabilityEnabled = parseBooleanEnv(
   process.env.COWORKER_OBSERVABILITY_ENABLED,
   false
 );
-const storage = await createCoworkerStorage(coworkerObservabilityEnabled);
-const observability = coworkerObservabilityEnabled ? await createCoworkerObservability() : null;
+const coworkerStorageMode = getCoworkerStorageMode();
+const storage = await createCoworkerStorage(coworkerObservabilityEnabled, coworkerStorageMode);
+const observability =
+  coworkerObservabilityEnabled && storage ? await createCoworkerObservability() : null;
 
 export const mastra = new Mastra({
   agents: { drawlessCoworker },
-  storage,
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),
+  ...(storage ? { storage } : {}),
   ...(observability ? { observability } : {}),
 });
 
@@ -35,22 +39,31 @@ mastra.setServer({
   apiRoutes: createCoworkerRoomApiRoutes(coworkerRoomRegistry),
 });
 
-function createDefaultStorage() {
+async function createDefaultStorage(mode: Exclude<CoworkerStorageMode, 'disabled'>) {
+  const { LibSQLStore } = await import('@mastra/libsql');
   return new LibSQLStore({
     id: 'mastra-storage',
-    url: 'file:./mastra.db',
+    url: mode === 'memory' ? ':memory:' : 'file:./mastra.db',
   });
 }
 
-async function createCoworkerStorage(enableObservability: boolean) {
-  if (!enableObservability) {
-    return createDefaultStorage();
+async function createCoworkerStorage(
+  enableObservability: boolean,
+  mode: CoworkerStorageMode
+) {
+  if (mode === 'disabled') {
+    return null;
   }
 
+  if (!enableObservability) {
+    return createDefaultStorage(mode);
+  }
+
+  const { MastraCompositeStore } = await import('@mastra/core/storage');
   const { DuckDBStore } = await import('@mastra/duckdb');
   return new MastraCompositeStore({
     id: 'composite-storage',
-    default: createDefaultStorage(),
+    default: await createDefaultStorage(mode),
     domains: {
       observability: await new DuckDBStore().getStore('observability'),
     },
