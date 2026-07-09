@@ -1,58 +1,12 @@
-import { readFileSync } from 'node:fs';
-import v8 from 'node:v8';
-
 import type { DrawlessCoworkerRoomRegistry } from '../collaboration/coworker-room-registry';
 
 type ActiveHandleInspector = {
   _getActiveHandles?: () => unknown[];
 };
 
-const PROC_STATUS_KEYS = new Set([
-  'VmPeak',
-  'VmSize',
-  'VmLck',
-  'VmPin',
-  'VmHWM',
-  'VmRSS',
-  'RssAnon',
-  'RssFile',
-  'RssShmem',
-  'VmData',
-  'VmStk',
-  'VmExe',
-  'VmLib',
-  'VmPTE',
-  'VmSwap',
-  'HugetlbPages',
-  'Threads',
-]);
-
-const PROC_SMAPS_ROLLUP_KEYS = new Set([
-  'Rss',
-  'Pss',
-  'Pss_Dirty',
-  'Shared_Clean',
-  'Shared_Dirty',
-  'Private_Clean',
-  'Private_Dirty',
-  'Referenced',
-  'Anonymous',
-  'KSM',
-  'LazyFree',
-  'AnonHugePages',
-  'ShmemPmdMapped',
-  'FilePmdMapped',
-  'Shared_Hugetlb',
-  'Private_Hugetlb',
-  'Swap',
-  'SwapPss',
-  'Locked',
-]);
-
 export function createCoworkerMemoryDebugSnapshot(registry: DrawlessCoworkerRoomRegistry) {
   const memory = process.memoryUsage();
   const rooms = registry.getDebugSnapshot();
-  const resourceUsage = process.resourceUsage();
 
   return {
     capturedAt: new Date().toISOString(),
@@ -76,25 +30,6 @@ export function createCoworkerMemoryDebugSnapshot(registry: DrawlessCoworkerRoom
       hasMastraPlatformAccessToken: Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim()),
       coworkerMemoryLogIntervalMs: process.env.COWORKER_MEMORY_LOG_INTERVAL_MS?.trim() || null,
     },
-    v8: {
-      heapStatistics: v8.getHeapStatistics(),
-      heapStatisticsMb: bytesRecordToMb(v8.getHeapStatistics()),
-      heapSpaces: v8.getHeapSpaceStatistics().map((space) => ({
-        ...space,
-        spaceSizeMb: bytesToMb(space.space_size),
-        spaceUsedSizeMb: bytesToMb(space.space_used_size),
-        spaceAvailableSizeMb: bytesToMb(space.space_available_size),
-        physicalSpaceSizeMb: bytesToMb(space.physical_space_size),
-      })),
-    },
-    resourceUsage: {
-      ...resourceUsage,
-      maxRSSMb: kbToMb(resourceUsage.maxRSS),
-    },
-    proc: {
-      status: readProcNumericFile('/proc/self/status', PROC_STATUS_KEYS),
-      smapsRollup: readProcNumericFile('/proc/self/smaps_rollup', PROC_SMAPS_ROLLUP_KEYS),
-    },
     activeHandles: {
       count: getActiveHandleCount(),
     },
@@ -113,9 +48,6 @@ export function startCoworkerMemoryDebugLogger(registry: DrawlessCoworkerRoomReg
       capturedAt: snapshot.capturedAt,
       memoryMb: snapshot.memoryMb,
       roomCount: snapshot.rooms.count,
-      procStatusMb: snapshot.proc.status.valuesMb,
-      procSmapsRollupMb: snapshot.proc.smapsRollup.valuesMb,
-      resourceMaxRSSMb: snapshot.resourceUsage.maxRSSMb,
       rooms: snapshot.rooms.items.map((room) => ({
         roomId: room.roomId,
         status: room.status,
@@ -132,18 +64,6 @@ export function startCoworkerMemoryDebugLogger(registry: DrawlessCoworkerRoomReg
 
 function bytesToMb(value: number) {
   return Math.round((value / 1024 / 1024) * 10) / 10;
-}
-
-function kbToMb(value: number) {
-  return Math.round((value / 1024) * 10) / 10;
-}
-
-function bytesRecordToMb(input: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(input)
-      .filter(([, value]) => typeof value === 'number')
-      .map(([key, value]) => [key, bytesToMb(value as number)])
-  );
 }
 
 function getActiveHandleCount() {
@@ -187,58 +107,4 @@ function parseBooleanEnv(value: string | undefined, fallback: boolean) {
   }
 
   return fallback;
-}
-
-function readProcNumericFile(path: string, allowedKeys: Set<string>) {
-  try {
-    const content = readFileSync(path, 'utf8');
-    return parseProcNumericFile(content, allowedKeys);
-  } catch (error) {
-    return {
-      available: false,
-      error: error instanceof Error ? error.message : String(error),
-      values: {},
-      valuesMb: {},
-      units: {},
-    };
-  }
-}
-
-function parseProcNumericFile(content: string, allowedKeys: Set<string>) {
-  const values: Record<string, number> = {};
-  const valuesMb: Record<string, number> = {};
-  const units: Record<string, string> = {};
-
-  for (const line of content.split('\n')) {
-    const parsed = parseProcNumericLine(line);
-    if (!parsed || !allowedKeys.has(parsed.key)) {
-      continue;
-    }
-
-    values[parsed.key] = parsed.value;
-    units[parsed.key] = parsed.unit;
-    if (parsed.unit === 'kB') {
-      valuesMb[parsed.key] = kbToMb(parsed.value);
-    }
-  }
-
-  return {
-    available: true,
-    values,
-    valuesMb,
-    units,
-  };
-}
-
-function parseProcNumericLine(line: string) {
-  const match = /^([^:]+):\s+(\d+)(?:\s+(kB))?\s*$/i.exec(line);
-  if (!match) {
-    return null;
-  }
-
-  return {
-    key: match[1],
-    value: Number(match[2]),
-    unit: match[3] ?? 'count',
-  };
 }
