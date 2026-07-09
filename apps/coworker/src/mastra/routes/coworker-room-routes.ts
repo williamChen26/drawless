@@ -7,11 +7,6 @@ import {
 } from '../../../../../packages/shared/src/index';
 import type { DrawlessCoworkerRoomRegistry } from '../collaboration/coworker-room-registry';
 import type { DrawlessAgentStreamOutput } from '../collaboration/cursor-chat-reply-handler';
-import {
-  createCoworkerMemoryDebugSnapshot,
-  isCoworkerMemoryDebugAuthorized,
-  isCoworkerMemoryDebugEnabled,
-} from '../debug/coworker-memory-debug';
 
 type TextStreamReader = {
   read(): Promise<{ value?: string; done: boolean }>;
@@ -31,7 +26,6 @@ type AgentStreamOutput = {
 // 画布读写仍然通过 coworker 自己的 tldraw sync client 走协同边界。
 export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCoworkerRoomRegistry) {
   return [
-    ...createCoworkerMemoryDebugRoutes(coworkerRoomRegistry),
     registerApiRoute('/drawless/rooms/:roomId/coworker/start', {
       method: 'POST',
       // 当前阶段用于本地 server/coworker 联调；生产环境需要换成 server 签名或内部鉴权。
@@ -185,27 +179,6 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
         } catch (error) {
           return c.json({ ok: false, error: toErrorMessage(error) }, 400);
         }
-      },
-    }),
-  ];
-}
-
-function createCoworkerMemoryDebugRoutes(coworkerRoomRegistry: DrawlessCoworkerRoomRegistry) {
-  if (!isCoworkerMemoryDebugEnabled()) {
-    return [];
-  }
-
-  return [
-    registerApiRoute('/drawless/debug/memory', {
-      method: 'GET',
-      // 诊断接口只读返回进程和 room 生命周期摘要，不返回完整 tldraw document。
-      requiresAuth: false,
-      handler: async (c) => {
-        if (!isCoworkerMemoryDebugAuthorized(c.req.header('authorization'))) {
-          return c.json({ ok: false, error: 'Unauthorized' }, 401);
-        }
-
-        return c.json(createCoworkerMemoryDebugSnapshot(coworkerRoomRegistry));
       },
     }),
   ];
