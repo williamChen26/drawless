@@ -1,6 +1,8 @@
 
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { drawlessCoworker } from './agents/drawless-coworker';
 import { DrawlessCoworkerRoomRegistry } from './collaboration/coworker-room-registry';
 import { createCoworkerRoomApiRoutes } from './routes/coworker-room-routes';
@@ -12,18 +14,16 @@ const coworkerObservabilityEnabled = parseBooleanEnv(
   process.env.COWORKER_OBSERVABILITY_ENABLED,
   false
 );
-const coworkerStorageMode = parseCoworkerStorageMode(process.env.COWORKER_STORAGE_MODE);
-const storage = await createCoworkerStorage(coworkerObservabilityEnabled, coworkerStorageMode);
-const observability =
-  coworkerObservabilityEnabled && storage ? await createCoworkerObservability() : null;
+const storage = await createCoworkerStorage(coworkerObservabilityEnabled);
+const observability = coworkerObservabilityEnabled ? await createCoworkerObservability() : null;
 
 export const mastra = new Mastra({
   agents: { drawlessCoworker },
+  storage,
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),
-  ...(storage ? { storage } : {}),
   ...(observability ? { observability } : {}),
 });
 
@@ -37,33 +37,22 @@ mastra.setServer({
   apiRoutes: createCoworkerRoomApiRoutes(coworkerRoomRegistry),
 });
 
-type CoworkerStorageMode = 'file' | 'memory' | 'disabled';
-
-async function createDefaultStorage(mode: Exclude<CoworkerStorageMode, 'disabled'>) {
-  const { LibSQLStore } = await import('@mastra/libsql');
+function createDefaultStorage() {
   return new LibSQLStore({
     id: 'mastra-storage',
-    url: mode === 'memory' ? ':memory:' : 'file:./mastra.db',
+    url: 'file:./mastra.db',
   });
 }
 
-async function createCoworkerStorage(
-  enableObservability: boolean,
-  mode: CoworkerStorageMode
-) {
-  if (mode === 'disabled') {
-    return null;
-  }
-
+async function createCoworkerStorage(enableObservability: boolean) {
   if (!enableObservability) {
-    return createDefaultStorage(mode);
+    return createDefaultStorage();
   }
 
-  const { MastraCompositeStore } = await import('@mastra/core/storage');
   const { DuckDBStore } = await import('@mastra/duckdb');
   return new MastraCompositeStore({
     id: 'composite-storage',
-    default: await createDefaultStorage(mode),
+    default: createDefaultStorage(),
     domains: {
       observability: await new DuckDBStore().getStore('observability'),
     },
@@ -110,13 +99,4 @@ function parseBooleanEnv(value: string | undefined, fallback: boolean) {
   }
 
   return fallback;
-}
-
-function parseCoworkerStorageMode(value: string | undefined): CoworkerStorageMode {
-  const normalized = value?.trim().toLowerCase();
-  if (normalized === 'memory' || normalized === 'disabled') {
-    return normalized;
-  }
-
-  return 'file';
 }

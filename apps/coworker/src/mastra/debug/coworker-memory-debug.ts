@@ -69,11 +69,6 @@ export function createCoworkerMemoryDebugSnapshot(registry: DrawlessCoworkerRoom
       nodeEnv: process.env.NODE_ENV ?? null,
       coworkerMemoryDebugEnabled: isCoworkerMemoryDebugEnabled(),
       hasCoworkerMemoryDebugToken: Boolean(process.env.COWORKER_MEMORY_DEBUG_TOKEN?.trim()),
-      coworkerAgentMemoryEnabled: parseBooleanEnv(
-        process.env.COWORKER_AGENT_MEMORY_ENABLED,
-        true
-      ),
-      coworkerStorageMode: parseCoworkerStorageMode(process.env.COWORKER_STORAGE_MODE),
       coworkerObservabilityEnabled: parseBooleanEnv(
         process.env.COWORKER_OBSERVABILITY_ENABLED,
         false
@@ -192,15 +187,6 @@ function parseBooleanEnv(value: string | undefined, fallback: boolean) {
   }
 
   return fallback;
-}
-
-function parseCoworkerStorageMode(value: string | undefined) {
-  const normalized = value?.trim().toLowerCase();
-  if (normalized === 'memory' || normalized === 'disabled') {
-    return normalized;
-  }
-
-  return 'file';
 }
 
 function readProcNumericFile(path: string, allowedKeys: Set<string>) {
