@@ -3,16 +3,19 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { drawlessCoworker } from './agents/drawless-coworker';
 import { DrawlessCoworkerRoomRegistry } from './collaboration/coworker-room-registry';
+import {
+  getCoworkerStorageMode,
+  type CoworkerStorageMode,
+} from './coworker-runtime-config';
 import { createCoworkerRoomApiRoutes } from './routes/coworker-room-routes';
 import { setCanvasContextCollector } from './tools/canvas-context-tool';
 import { setCanvasEditExecutor } from './tools/canvas-edit-tool';
-import { startCoworkerMemoryDebugLogger } from './debug/coworker-memory-debug';
 
 const coworkerObservabilityEnabled = parseBooleanEnv(
   process.env.COWORKER_OBSERVABILITY_ENABLED,
   false
 );
-const coworkerStorageMode = parseCoworkerStorageMode(process.env.COWORKER_STORAGE_MODE);
+const coworkerStorageMode = getCoworkerStorageMode();
 const storage = await createCoworkerStorage(coworkerObservabilityEnabled, coworkerStorageMode);
 const observability =
   coworkerObservabilityEnabled && storage ? await createCoworkerObservability() : null;
@@ -31,13 +34,10 @@ const registeredDrawlessCoworker = mastra.getAgentById('drawless-coworker');
 const coworkerRoomRegistry = new DrawlessCoworkerRoomRegistry(registeredDrawlessCoworker);
 setCanvasContextCollector((request) => coworkerRoomRegistry.collectCanvasContext(request));
 setCanvasEditExecutor((request) => coworkerRoomRegistry.applyCanvasEdit(request));
-startCoworkerMemoryDebugLogger(coworkerRoomRegistry);
 
 mastra.setServer({
   apiRoutes: createCoworkerRoomApiRoutes(coworkerRoomRegistry),
 });
-
-type CoworkerStorageMode = 'file' | 'memory' | 'disabled';
 
 async function createDefaultStorage(mode: Exclude<CoworkerStorageMode, 'disabled'>) {
   const { LibSQLStore } = await import('@mastra/libsql');
@@ -110,13 +110,4 @@ function parseBooleanEnv(value: string | undefined, fallback: boolean) {
   }
 
   return fallback;
-}
-
-function parseCoworkerStorageMode(value: string | undefined): CoworkerStorageMode {
-  const normalized = value?.trim().toLowerCase();
-  if (normalized === 'memory' || normalized === 'disabled') {
-    return normalized;
-  }
-
-  return 'file';
 }
