@@ -1,0 +1,442 @@
+.note {
+  --note-ink: oklch(29% 0.035 68deg);
+  --note-muted: oklch(49% 0.035 70deg);
+  --note-paper: oklch(97.5% 0.026 88deg);
+  --note-rule: oklch(82% 0.04 78deg / 55%);
+  --note-accent: oklch(55% 0.14 48deg);
+  --note-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  max-height: min(42rem, calc(100dvh - 260px));
+  flex-direction: column;
+  container-type: inline-size;
+  width: min(100%, 40rem);
+  color: var(--note-ink);
+  background:
+    linear-gradient(90deg, transparent 0 3.75rem, oklch(68% 0.12 28deg / 33%) 3.75rem 3.82rem, transparent 3.82rem),
+    var(--note-paper);
+  border: 1px solid oklch(73% 0.04 75deg);
+  box-shadow:
+    0.28rem 0.36rem 0 oklch(39% 0.045 62deg / 15%),
+    0 1.1rem 2.5rem oklch(31% 0.035 65deg / 13%);
+  transform-origin: 50% 0;
+  animation: note-arrive 380ms var(--note-ease) both;
+}
+
+.note::before {
+  position: absolute;
+  z-index: -2;
+  inset: 0.42rem -0.38rem -0.34rem 0.45rem;
+  border: 1px solid oklch(76% 0.035 75deg);
+  background: oklch(93% 0.025 82deg);
+  box-shadow: 0.18rem 0.22rem 0 oklch(40% 0.04 60deg / 10%);
+  content: "";
+  transform: rotate(0.7deg);
+}
+
+.note::after {
+  position: absolute;
+  z-index: -1;
+  inset: -0.28rem 0.5rem 0.3rem -0.32rem;
+  border: 1px solid oklch(79% 0.03 76deg);
+  background: oklch(95% 0.022 87deg);
+  content: "";
+  transform: rotate(-0.45deg);
+}
+
+.clip {
+  position: absolute;
+  z-index: 2;
+  top: -0.58rem;
+  left: 50%;
+  width: 3.9rem;
+  height: 1.1rem;
+  border: 1px solid oklch(46% 0.018 75deg);
+  border-radius: 0.16rem;
+  background:
+    linear-gradient(180deg, oklch(87% 0.008 75deg), oklch(60% 0.014 75deg) 47%, oklch(78% 0.01 75deg) 52%, oklch(54% 0.012 75deg));
+  box-shadow:
+    inset 0 1px oklch(98% 0.005 75deg / 70%),
+    0 0.15rem 0.2rem oklch(30% 0.02 65deg / 22%);
+  transform: translateX(-50%) rotate(-1deg);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: clamp(1.6rem, 5cqi, 2.4rem) clamp(1.15rem, 5cqi, 2.3rem) 1.15rem clamp(4.5rem, 13cqi, 5.5rem);
+  border-bottom: 1px solid var(--note-rule);
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.48rem;
+  color: var(--note-muted);
+  font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
+  font-size: 0.69rem;
+  font-weight: 650;
+  letter-spacing: 0.15em;
+  line-height: 1;
+}
+
+.statusMark {
+  width: 1.55rem;
+  height: 0.18rem;
+  background: var(--note-accent);
+  transform-origin: left center;
+}
+
+.note[data-phase="speaking"] .statusMark {
+  animation: status-writing 1.3s var(--note-ease) infinite;
+}
+
+.note[data-phase="completed"] {
+  --note-accent: oklch(52% 0.11 151deg);
+}
+
+.note[data-phase="interrupted"] {
+  --note-accent: oklch(55% 0.055 73deg);
+}
+
+.note[data-phase="error"] {
+  --note-accent: oklch(51% 0.18 27deg);
+}
+
+.title {
+  max-width: 22ch;
+  margin: 0;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: clamp(1.22rem, 5cqi, 1.72rem);
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  line-height: 1.24;
+}
+
+.folio {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 0.16rem;
+  margin: -0.15rem 0 0;
+  color: var(--note-muted);
+  font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
+  text-align: right;
+}
+
+.folio span {
+  font-size: 0.6rem;
+  letter-spacing: 0.13em;
+}
+
+.folio strong {
+  color: var(--note-ink);
+  font-family: "Baskerville", "Times New Roman", serif;
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.copy {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: clamp(1.15rem, 4cqi, 1.75rem) clamp(1.15rem, 5cqi, 2.3rem) clamp(1.6rem, 5cqi, 2.25rem) clamp(0.8rem, 3cqi, 1.15rem);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 1.84rem,
+    var(--note-rule) 1.87rem,
+    transparent 1.9rem
+  );
+}
+
+.copy:focus-visible {
+  outline: 2px solid var(--note-accent);
+  outline-offset: -4px;
+}
+
+.paragraphRow {
+  display: grid;
+  grid-template-columns: 2.45rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: baseline;
+  animation: paragraph-enter 280ms var(--note-ease) both;
+}
+
+.paragraphRow + .paragraphRow {
+  margin-top: 1.25rem;
+}
+
+.paragraphRow:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.paragraphRow:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.paragraphRow:nth-child(n + 4) {
+  animation-delay: 120ms;
+}
+
+.paragraphRow p {
+  margin: 0;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: clamp(0.96rem, 3.4cqi, 1.06rem);
+  letter-spacing: 0.018em;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  white-space: pre-wrap;
+}
+
+.lineNumber {
+  justify-self: end;
+  color: oklch(57% 0.055 55deg);
+  font-family: "Baskerville", "Times New Roman", serif;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.emptyCopy {
+  margin: 0 0 0 3.25rem;
+  color: var(--note-muted);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 0.95rem;
+  font-style: italic;
+  line-height: 1.9;
+}
+
+.writingLine {
+  display: block;
+  width: min(9rem, 38%);
+  height: 1px;
+  margin: 1.1rem 0 0 3.25rem;
+  background: var(--note-accent);
+  transform-origin: left center;
+  animation: writing-progress 1.5s var(--note-ease) infinite;
+}
+
+.receipt,
+.endNote {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.4rem;
+  margin: 0 clamp(1.15rem, 5cqi, 2.3rem) 0 clamp(4.5rem, 13cqi, 5.5rem);
+  padding: 1.15rem 0 1.35rem;
+  border-top: 1px dashed oklch(58% 0.045 68deg / 55%);
+  animation: receipt-enter 340ms var(--note-ease) both;
+}
+
+.receipt::before,
+.endNote::before {
+  position: absolute;
+  top: -0.19rem;
+  left: -0.55rem;
+  width: 0.34rem;
+  height: 0.34rem;
+  border: 1px solid oklch(58% 0.045 68deg / 65%);
+  border-radius: 50%;
+  background: var(--note-paper);
+  content: "";
+}
+
+.receiptCopy {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.receiptCopy span,
+.endNote span {
+  color: var(--note-accent);
+  font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.receiptCopy strong {
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.receiptCopy small {
+  color: var(--note-muted);
+  font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.locateButton {
+  flex: 0 0 auto;
+  min-height: 2.25rem;
+  border-color: var(--note-ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--note-ink);
+  font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
+  font-size: 0.78rem;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms var(--note-ease);
+}
+
+.locateButton:hover {
+  background: var(--note-ink);
+  color: var(--note-paper);
+  transform: translateY(-1px);
+}
+
+.locateButton:active {
+  transform: translateY(1px);
+}
+
+.locateButton:focus-visible {
+  outline: 2px solid var(--note-accent);
+  outline-offset: 3px;
+}
+
+.endNote {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.endNote span {
+  flex: 0 0 auto;
+  padding-top: 0.15rem;
+}
+
+.endNote p {
+  margin: 0;
+  color: var(--note-muted);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 0.87rem;
+  line-height: 1.55;
+}
+
+@container (max-width: 27rem) {
+  .header {
+    gap: 0.75rem;
+    padding-left: 4rem;
+  }
+
+  .folio span {
+    display: none;
+  }
+
+  .copy {
+    padding-left: 0.55rem;
+  }
+
+  .paragraphRow {
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+
+  .receipt,
+  .endNote {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.85rem;
+    margin-left: 4rem;
+  }
+
+  .locateButton {
+    align-self: stretch;
+    min-height: 2.75rem;
+  }
+}
+
+@media (max-width: 679px) {
+  .note {
+    max-height: min(34rem, calc(100dvh - 300px));
+  }
+}
+
+@keyframes note-arrive {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.55rem, 0) rotate(-0.35deg);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0);
+  }
+}
+
+@keyframes paragraph-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0.45rem, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes receipt-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.35rem, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes status-writing {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scaleX(0.38);
+  }
+  45% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes writing-progress {
+  0% {
+    opacity: 0.25;
+    transform: scaleX(0.08);
+  }
+  65% {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note,
+  .paragraphRow,
+  .receipt,
+  .endNote,
+  .statusMark,
+  .writingLine {
+    animation: none;
+  }
+
+  .locateButton {
+    transition: none;
+  }
+}

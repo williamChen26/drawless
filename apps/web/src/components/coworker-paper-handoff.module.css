@@ -1,0 +1,385 @@
+.root {
+  position: relative;
+  inline-size: clamp(17rem, 44vw, 26rem);
+  block-size: 6.75rem;
+  overflow: visible;
+  pointer-events: none;
+  contain: layout style;
+  --paper: #fff9e8;
+  --paper-shade: #f1e5c8;
+  --paper-edge: #806b4e;
+  --ink: #18396c;
+  --motion-duration: 820ms;
+  --motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.paper {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--paper-edge) 78%, transparent);
+  background-color: var(--paper);
+  background-image: repeating-linear-gradient(
+    7deg,
+    transparent 0 7px,
+    color-mix(in srgb, var(--paper-edge) 7%, transparent) 7px 8px
+  );
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--paper-edge) 28%, transparent),
+    0 5px 12px color-mix(in srgb, var(--ink) 10%, transparent);
+  clip-path: polygon(
+    0.8% 5%,
+    7% 1%,
+    16% 4%,
+    27% 0,
+    39% 3%,
+    51% 1%,
+    64% 4%,
+    76% 1%,
+    89% 3%,
+    99% 0,
+    100% 88%,
+    95% 96%,
+    83% 94%,
+    70% 99%,
+    57% 95%,
+    43% 100%,
+    29% 96%,
+    15% 99%,
+    1% 95%
+  );
+  color: var(--ink);
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+
+.sheet {
+  inset-block-start: 1.8rem;
+  inset-inline-start: 22%;
+  inline-size: 72%;
+  min-block-size: 3.25rem;
+  padding: 0.65rem 1rem 0.72rem;
+  animation: handoffSheet var(--motion-duration) var(--motion-ease) both;
+}
+
+.copy {
+  display: -webkit-box;
+  max-inline-size: 100%;
+  overflow: hidden;
+  font-size: clamp(0.75rem, 1.7vw, 0.9rem);
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.foldMark {
+  position: absolute;
+  inset-inline-end: 0.25rem;
+  inset-block-end: 0.18rem;
+  inline-size: 0.7rem;
+  block-size: 0.7rem;
+  border-block-start: 1px solid color-mix(in srgb, var(--paper-edge) 58%, transparent);
+  border-inline-start: 1px solid color-mix(in srgb, var(--paper-edge) 58%, transparent);
+  background: var(--paper-shade);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+.foldedSheet {
+  inset-block-start: 2.2rem;
+  inset-inline-start: 44%;
+  inline-size: 42%;
+  block-size: 2.35rem;
+  animation: handoffFold var(--motion-duration) var(--motion-ease) both;
+}
+
+.foldedSheet::before {
+  position: absolute;
+  inset: 22% 11%;
+  border-block-start: 1px solid color-mix(in srgb, var(--ink) 27%, transparent);
+  border-block-end: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  content: "";
+}
+
+.paperScrap {
+  inset-block-start: 2.5rem;
+  inset-inline-start: 44%;
+  inline-size: 23%;
+  block-size: 1.55rem;
+  animation: handoffScrap var(--motion-duration) var(--motion-ease) both;
+}
+
+.inkTrail {
+  position: absolute;
+  inset: 0;
+}
+
+.inkTrail > span {
+  position: absolute;
+  display: block;
+  block-size: 1rem;
+  border-block-start: 1.5px dashed color-mix(in srgb, var(--ink) 68%, transparent);
+  border-radius: 50%;
+  opacity: 0;
+  transform-origin: 100% 50%;
+  will-change: transform, opacity;
+}
+
+.trailFar {
+  inset-block-start: 4.3rem;
+  inset-inline-start: 58%;
+  inline-size: 28%;
+  animation: revealTrailFar var(--motion-duration) var(--motion-ease) both;
+}
+
+.trailMiddle {
+  inset-block-start: 3.15rem;
+  inset-inline-start: 8%;
+  inline-size: 46%;
+  animation: revealTrailMiddle var(--motion-duration) var(--motion-ease) both;
+}
+
+.trailNear {
+  inset-block-start: 2.75rem;
+  inset-inline-start: -30%;
+  inline-size: 42%;
+  animation: revealTrailNear var(--motion-duration) var(--motion-ease) both;
+}
+
+@keyframes handoffSheet {
+  0% {
+    opacity: 0;
+    transform: translate3d(18%, 1.15rem, 0) rotate(-1.5deg) scale(1);
+  }
+
+  5% {
+    opacity: 1;
+  }
+
+  28% {
+    opacity: 1;
+    transform: translate3d(3%, 0, 0) rotate(0.8deg) scale(0.98);
+  }
+
+  46%,
+  100% {
+    opacity: 0;
+    transform: translate3d(-18%, -0.45rem, 0) rotate(-2deg) scale(0.76);
+  }
+}
+
+@keyframes handoffFold {
+  0%,
+  29% {
+    opacity: 0;
+    transform: translate3d(13%, 0.4rem, 0) rotate(-1deg) scale(0.94);
+  }
+
+  37% {
+    opacity: 1;
+  }
+
+  65% {
+    opacity: 0.94;
+    transform: translate3d(-140%, -1.05rem, 0) rotate(3.5deg) scale(0.58);
+  }
+
+  73%,
+  100% {
+    opacity: 0;
+    transform: translate3d(-162%, -0.8rem, 0) rotate(1deg) scale(0.5);
+  }
+}
+
+@keyframes handoffScrap {
+  0%,
+  57% {
+    opacity: 0;
+    transform: translate3d(-40%, -0.9rem, 0) rotate(4deg) scale(0.62);
+  }
+
+  64% {
+    opacity: 1;
+  }
+
+  88% {
+    opacity: 0.9;
+    transform: translate3d(-330%, -0.15rem, 0) rotate(-5deg) scale(0.36);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(-360%, 0, 0) rotate(-3deg) scale(0.32);
+  }
+}
+
+@keyframes revealTrailFar {
+  0%,
+  9% {
+    opacity: 0;
+    transform: rotate(8deg) scaleX(0);
+  }
+
+  31% {
+    opacity: 0.72;
+    transform: rotate(8deg) scaleX(1);
+  }
+
+  58%,
+  100% {
+    opacity: 0;
+    transform: rotate(8deg) scaleX(1);
+  }
+}
+
+@keyframes revealTrailMiddle {
+  0%,
+  30% {
+    opacity: 0;
+    transform: rotate(-6deg) scaleX(0);
+  }
+
+  53% {
+    opacity: 0.68;
+    transform: rotate(-6deg) scaleX(1);
+  }
+
+  76%,
+  100% {
+    opacity: 0;
+    transform: rotate(-6deg) scaleX(1);
+  }
+}
+
+@keyframes revealTrailNear {
+  0%,
+  53% {
+    opacity: 0;
+    transform: rotate(4deg) scaleX(0);
+  }
+
+  75% {
+    opacity: 0.64;
+    transform: rotate(4deg) scaleX(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(4deg) scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+    opacity: 1;
+    transform: translate3d(-42%, -0.35rem, 0) rotate(-1deg) scale(0.7);
+  }
+
+  .foldedSheet,
+  .paperScrap,
+  .inkTrail > span {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+@media (max-width: 679px) and (prefers-reduced-motion: no-preference) {
+  .root {
+    margin-left: auto;
+    inline-size: min(100%, 22rem);
+  }
+
+  .sheet {
+    animation-name: handoff-sheet-mobile;
+  }
+
+  .foldedSheet {
+    animation-name: handoff-fold-mobile;
+  }
+
+  .paperScrap {
+    animation-name: handoff-scrap-mobile;
+  }
+
+  .trailFar,
+  .trailMiddle,
+  .trailNear {
+    transform-origin: 0 50%;
+  }
+}
+
+@media (max-width: 679px) and (prefers-reduced-motion: reduce) {
+  .sheet {
+    transform: translate3d(20%, -0.35rem, 0) rotate(1deg) scale(0.7);
+  }
+}
+
+@keyframes handoff-sheet-mobile {
+  0% {
+    opacity: 0;
+    transform: translate3d(-20%, -0.3rem, 0) rotate(1.2deg) scale(1);
+  }
+
+  6% {
+    opacity: 1;
+  }
+
+  30% {
+    opacity: 1;
+    transform: translate3d(4%, 0.2rem, 0) rotate(-0.6deg) scale(0.97);
+  }
+
+  48%,
+  100% {
+    opacity: 0;
+    transform: translate3d(24%, 1.15rem, 0) rotate(1.8deg) scale(0.72);
+  }
+}
+
+@keyframes handoff-fold-mobile {
+  0%,
+  30% {
+    opacity: 0;
+    transform: translate3d(-12%, 0, 0) rotate(1deg) scale(0.92);
+  }
+
+  38% {
+    opacity: 1;
+  }
+
+  67% {
+    opacity: 0.94;
+    transform: translate3d(72%, 1.35rem, 0) rotate(-3deg) scale(0.54);
+  }
+
+  75%,
+  100% {
+    opacity: 0;
+    transform: translate3d(88%, 1.55rem, 0) rotate(-1deg) scale(0.46);
+  }
+}
+
+@keyframes handoff-scrap-mobile {
+  0%,
+  58% {
+    opacity: 0;
+    transform: translate3d(22%, 0.75rem, 0) rotate(-4deg) scale(0.58);
+  }
+
+  66% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 0.9;
+    transform: translate3d(168%, 2rem, 0) rotate(5deg) scale(0.34);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(182%, 2.15rem, 0) rotate(3deg) scale(0.3);
+  }
+}

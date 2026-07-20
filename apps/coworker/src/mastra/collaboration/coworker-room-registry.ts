@@ -434,6 +434,7 @@ function createConversationPrompt(request: DrawlessCoworkerConversationStreamReq
     'edit-canvas 的 operations 必须是小步、明确、可审核的计划；不要一次性生成大量对象。',
     'edit-canvas 会由 coworker 按受控步骤写入画布；operations 必须小步、明确、可审核。',
     '创建连线时，优先用 create_arrow 的 startBinding / endBinding 绑定 shape；连接同一次请求里刚创建的 shape 时，用 create_shape 的 operationId 作为 binding target。',
+    'binding target 使用 operationId 时必须完全省略 shapeId 字段，绝不能把可选 shapeId 写成空字符串。',
     '创建流程、状态或备注类对象时，可以用 styleRole 表达语义化视觉角色，例如 start、step、decision、success、error、note；不要编造 color、fill、size 等底层样式字段。',
     'edit-canvas 返回结果前，不要声称已经修改画布；如果工具返回 warnings，要如实告知。',
     ...viewportLines,

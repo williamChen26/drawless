@@ -121,17 +121,6 @@ export function getCoworkerConversationPendingApproval(
   return null;
 }
 
-export function hasCoworkerConversationApproval(
-  block: CoworkerConversationTimelineBlock,
-  approval: CoworkerConversationToolApproval
-) {
-  return (
-    block.kind === "tool" &&
-    block.toolCallId === approval.toolCallId &&
-    block.approval?.runId === approval.runId
-  );
-}
-
 export function setCoworkerConversationToolStatus(
   blocks: CoworkerConversationTimelineBlock[],
   approval: CoworkerConversationToolApproval,

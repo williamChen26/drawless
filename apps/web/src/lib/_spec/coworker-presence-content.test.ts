@@ -1,0 +1,121 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  createCoworkerApprovalSummary,
+  createCoworkerResultSummary,
+  getLatestSemanticSegment
+} from "../coworker-presence-content";
+
+describe("coworker presence content", () => {
+  it("summarizes a validated canvas edit plan without guessing", () => {
+    const summary = createCoworkerApprovalSummary({
+      runId: "run-1",
+      toolCallId: "tool-1",
+      toolName: "edit-canvas",
+      args: {
+        roomId: "room-1",
+        currentPageId: "page:1",
+        intent: "整理登录流程",
+        operations: [
+          {
+            operationId: "create-1",
+            kind: "create_shape",
+            shapeKind: "rectangle",
+            bounds: { x: 0, y: 0, w: 120, h: 80 }
+          },
+          {
+            operationId: "move-1",
+            kind: "move_shape",
+            shapeId: "shape:1",
+            point: { x: 40, y: 80 }
+          },
+          {
+            operationId: "arrow-1",
+            kind: "create_arrow",
+            from: { x: 0, y: 0 },
+            to: { x: 100, y: 100 }
+          }
+        ]
+      }
+    });
+
+    expect(summary).toMatchObject({
+      title: "我准备修改当前画布",
+      intent: "整理登录流程",
+      operationCount: 3,
+      operationSummary: "新增 1 项 · 移动 1 项 · 连接 1 项",
+      scope: "当前页面",
+      structured: true,
+      canApprove: true,
+      validationMessage: null
+    });
+  });
+
+  it("validates streamed JSON string arguments before presenting them", () => {
+    const summary = createCoworkerApprovalSummary({
+      runId: "run-2",
+      toolCallId: "tool-2",
+      toolName: "edit-canvas",
+      args: JSON.stringify({
+        roomId: "room-1",
+        currentPageId: "page:1",
+        intent: "连接登录流程",
+        operations: [
+          {
+            operationId: "arrow-1",
+            kind: "create_arrow",
+            from: { x: 20, y: 20 },
+            to: { x: 120, y: 20 }
+          }
+        ]
+      })
+    });
+
+    expect(summary).toMatchObject({
+      intent: "连接登录流程",
+      operationCount: 1,
+      operationSummary: "连接 1 项",
+      scope: "当前页面",
+      structured: true
+    });
+  });
+
+  it("falls back safely for unknown or invalid tools", () => {
+    expect(
+      createCoworkerApprovalSummary({
+        runId: "run-1",
+        toolCallId: "tool-1",
+        toolName: "edit-canvas",
+        args: { intent: "missing contract fields" }
+      })
+    ).toMatchObject({
+      title: "这个画布计划还不能执行",
+      structured: false,
+      canApprove: false
+    });
+  });
+
+  it("extracts record ids from a validated canvas edit result", () => {
+    expect(
+      createCoworkerResultSummary({
+        roomId: "room-1",
+        applied: true,
+        createdRecordIds: ["shape:1", "shape:2"],
+        updatedRecordIds: ["shape:2", "shape:3"],
+        warnings: [],
+        summary: "已经连接关键节点"
+      })
+    ).toEqual({
+      summary: "已经连接关键节点",
+      recordIds: ["shape:1", "shape:2", "shape:3"],
+      warnings: []
+    });
+  });
+
+  it("keeps only the latest readable semantic segment", () => {
+    expect(
+      getLatestSemanticSegment("我已经整理了结构。接下来会连接关键节点。")
+    ).toBe("接下来会连接关键节点。");
+    expect(getLatestSemanticSegment("x".repeat(140))).toHaveLength(120);
+  });
+});

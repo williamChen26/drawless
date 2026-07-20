@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSync } from "@tldraw/sync";
-import { inlineBase64AssetStore, Tldraw, type Editor } from "tldraw";
+import {
+  inlineBase64AssetStore,
+  isShapeId,
+  Tldraw,
+  type Editor,
+  type TLShapeId
+} from "tldraw";
 import type { DrawlessCanvasViewportContext } from "@drawless/shared";
 
 import {
@@ -15,7 +21,6 @@ import {
   type CollaborationState
 } from "./collaboration-state";
 import { CoworkerConversationWindow } from "./coworker-conversation-window";
-import { CoworkerEntryDialog } from "./coworker-entry-dialog";
 import { useCoworkerControl } from "./coworker-control-state";
 import { useRoomShare } from "./room-share-state";
 
@@ -129,14 +134,37 @@ function SyncedCanvasShell({
           }}
         />
         <CoworkerConversationWindow
+          coworker={coworker}
           roomId={collaboration.roomId}
           getCanvasViewport={() => createCanvasViewportContext(editorRef.current)}
+          onLocateResult={(recordIds) =>
+            locateCanvasResult(editorRef.current, recordIds)
+          }
         />
-        {/* 入场弹窗放在 tldraw host 内，确保遮罩、焦点管理和画布工具栏处在同一客户端边界。 */}
-        <CoworkerEntryDialog coworker={coworker} roomId={collaboration.roomId} />
       </div>
     </CanvasShellFrame>
   );
+}
+
+function locateCanvasResult(editor: Editor | null, recordIds: string[]) {
+  if (!editor) {
+    return;
+  }
+
+  // 工具结果只提供 record ID；点击时重新查询 tldraw store，避免缓存第二份 shape 数据。
+  const shapeIds = recordIds.filter(
+    (recordId): recordId is TLShapeId =>
+      isShapeId(recordId) && Boolean(editor.getShape(recordId))
+  );
+  if (shapeIds.length === 0) {
+    return;
+  }
+
+  editor.setSelectedShapes(shapeIds);
+  editor.zoomToSelection({
+    animation: { duration: editor.options.animationMediumMs }
+  });
+  editor.timers.setTimeout(() => editor.getContainer().focus(), 100);
 }
 
 function createCanvasViewportContext(

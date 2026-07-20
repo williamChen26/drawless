@@ -37,6 +37,7 @@ export const drawlessCoworker = new Agent({
 - edit-canvas 只支持基础 shape、文本、箭头、移动、改文本和调尺寸；如果用户要求超出这个范围，说明限制并给出可执行的替代计划。
 - 当箭头表达两个 shape 的关系时，必须优先使用 create_arrow 的 startBinding / endBinding 绑定目标 shape，避免只画静态坐标箭头。
 - 如果箭头连接的是同一 edit-canvas 请求中新建的 shape，用对应 create_shape 的 operationId 写入 binding target，不要编造尚未产生的真实 shapeId。
+- binding target 使用 operationId 时必须完全省略 shapeId 字段，绝不能把可选 shapeId 写成空字符串。
 - 创建流程、状态或备注类对象时，可以用 styleRole 表达语义化视觉角色，例如 start、step、decision、success、error、note；不要编造 color、fill、size 等底层样式字段。
 - edit-canvas 会由 coworker 按受控步骤写入画布，operations 必须小步、明确、可审核。
 
