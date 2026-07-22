@@ -22,7 +22,7 @@ describe("coworker conversation components", () => {
 
     expect(html).toContain('aria-controls="coworker-panel"');
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain('aria-label="找 Coworker"');
+    expect(html).toContain('aria-label="找 Drew"');
     expect(html).toContain('alt=""');
   });
 
@@ -41,7 +41,7 @@ describe("coworker conversation components", () => {
       />
     );
 
-    expect(html).toContain('aria-label="找 Coworker，等你确认"');
+    expect(html).toContain('aria-label="找 Drew，等你确认"');
     expect(html).toContain("等你确认");
     expect(html).not.toContain("disabled");
   });
@@ -62,7 +62,7 @@ describe("coworker conversation components", () => {
       />
     );
 
-    expect(html).toContain("Coworker 提交了工作计划");
+    expect(html).toContain("Drew 提交了工作计划");
     expect(html).not.toContain("<blockquote>");
     expect(html).not.toContain("<span>你</span>");
   });

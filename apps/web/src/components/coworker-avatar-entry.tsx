@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 import { Button } from "@drawless/ui";
 
 import {
@@ -48,10 +49,10 @@ export function CoworkerAvatarEntry({
 }: CoworkerAvatarEntryProps) {
   const [assetFailed, setAssetFailed] = useState(false);
   const accessibleLabel = expanded
-    ? "收起 Coworker 协作空间"
+    ? `收起与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的协作空间`
     : attentionLabel
-      ? `找 Coworker，${attentionLabel}`
-      : "找 Coworker";
+      ? `找 ${DRAWLESS_COWORKER_DISPLAY_NAME}，${attentionLabel}`
+      : `找 ${DRAWLESS_COWORKER_DISPLAY_NAME}`;
   const visibleLabel =
     !expanded && attentionLabel
       ? attentionLabel

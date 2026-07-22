@@ -1,4 +1,5 @@
 import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
   coworkerApprovalIdSchema,
   coworkerApprovalListResponseSchema,
   coworkerApprovalResolutionRequestSchema,
@@ -12,7 +13,7 @@ import {
 import { resolveCoworkerControlServerUrl } from "./coworker-control";
 
 export type CoworkerConversationStreamError = {
-  /** 错误类型，用于浮窗展示和测试判断。 */
+  /** 错误类型，用于界面分支和测试判断。 */
   code:
     | "INVALID_SERVER_URL"
     | "INVALID_ROOM_ID"
@@ -20,7 +21,7 @@ export type CoworkerConversationStreamError = {
     | "INVALID_RESPONSE"
     | "HTTP_ERROR"
     | "MISSING_STREAM";
-  /** 给开发阶段直接展示的人类可读错误。 */
+  /** 可直接转换为用户提示的人类可读错误。 */
   message: string;
   /** 原始错误或响应内容，便于排查链路问题。 */
   raw: unknown;
@@ -108,7 +109,7 @@ export async function loadCoworkerPendingApprovals(input: {
         code: "HTTP_ERROR",
         message:
           extractErrorMessage(raw) ??
-          `Coworker approval recovery returned ${response.status}.`,
+          `无法恢复 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的待确认计划（${response.status}）。`,
         raw
       }
     };
@@ -120,7 +121,7 @@ export async function loadCoworkerPendingApprovals(input: {
       ok: false,
       error: {
         code: "INVALID_RESPONSE",
-        message: "Coworker approval recovery returned an invalid response.",
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 的待确认计划返回了无法识别的数据。`,
         raw
       }
     };
@@ -209,7 +210,9 @@ export async function createCoworkerConversationStream(input: {
       ok: false,
       error: {
         code: "HTTP_ERROR",
-        message: extractErrorMessage(raw) ?? `Coworker conversation returned ${response.status}.`,
+        message:
+          extractErrorMessage(raw) ??
+          `暂时无法收到 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应（${response.status}）。`,
         raw
       }
     };
@@ -220,7 +223,7 @@ export async function createCoworkerConversationStream(input: {
       ok: false,
       error: {
         code: "MISSING_STREAM",
-        message: "Coworker conversation stream is empty.",
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 这次没有返回内容，请稍后再试。`,
         raw: response
       }
     };
@@ -299,7 +302,9 @@ export async function createCoworkerApprovalResolutionStream(input: {
       ok: false,
       error: {
         code: "HTTP_ERROR",
-        message: extractErrorMessage(raw) ?? `Coworker conversation returned ${response.status}.`,
+        message:
+          extractErrorMessage(raw) ??
+          `暂时无法继续 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应（${response.status}）。`,
         raw
       }
     };
@@ -310,7 +315,7 @@ export async function createCoworkerApprovalResolutionStream(input: {
       ok: false,
       error: {
         code: "MISSING_STREAM",
-        message: "Coworker conversation stream is empty.",
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 这次没有返回内容，请稍后再试。`,
         raw: response
       }
     };

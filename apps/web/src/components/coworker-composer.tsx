@@ -6,6 +6,7 @@ import React, {
   type KeyboardEvent,
   useRef
 } from "react";
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 import { Button, Textarea } from "@drawless/ui";
 
 const COMPOSER_HINT_ID = "coworker-composer-hint";
@@ -38,8 +39,8 @@ export type CoworkerComposerProps = {
 export function CoworkerComposer({
   message,
   sendDisabled,
-  busyHint = "Coworker 正在处理。你可以先写下来，当前步骤结束后再递给他。",
-  label = "写给 Coworker",
+  busyHint = `${DRAWLESS_COWORKER_DISPLAY_NAME} 正在处理。你可以先写下来，当前步骤结束后再递给他。`,
+  label = `写给 ${DRAWLESS_COWORKER_DISPLAY_NAME}`,
   placeholder = "聊聊你的想法，或者把要做的事交代给我",
   sendLabel = "递给他",
   onMessageChange,
@@ -111,7 +112,11 @@ export function CoworkerComposer({
           value={message}
         />
         <Button
-          aria-label={sendDisabled ? "Coworker 正在处理当前工作" : sendLabel}
+          aria-label={
+            sendDisabled
+              ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 正在处理当前工作`
+              : sendLabel
+          }
           className="coworker-composer__send"
           disabled={!canSend}
           type="submit"

@@ -1,11 +1,14 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 import { Button } from "@drawless/ui";
 
 import type { CoworkerConversationTimelineBlock } from "../lib/coworker-conversation-timeline";
 import { normalizeCoworkerExpression } from "../lib/coworker-presence-content";
 import type { CoworkerConversationTurn } from "../lib/use-coworker-conversation";
+
+const SHOW_DEBUG_UI = process.env.NEXT_PUBLIC_DRAWLESS_DEBUG_UI === "true";
 
 export type CoworkerActivityLogProps = {
   /** 协作往来容器 DOM ID。 */
@@ -17,7 +20,7 @@ export type CoworkerActivityLogProps = {
 };
 
 /**
- * 展示当前 room 中的沟通和工作事件；技术细节只在非生产环境提供。
+ * 展示当前 room 中的沟通和工作事件；技术细节只在显式 debug 模式提供。
  */
 export function CoworkerActivityLog({
   id,
@@ -32,7 +35,7 @@ export function CoworkerActivityLog({
 
   return (
     <aside
-      aria-label="与 Coworker 的协作往来"
+      aria-label={`与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的协作往来`}
       className="coworker-activity-log"
       id={id}
       ref={logRef}
@@ -41,7 +44,7 @@ export function CoworkerActivityLog({
       <header className="coworker-activity-log__header">
         <div>
           <strong>协作往来</strong>
-          <span>我们在这个 Room 里说过的话和推进的工作</span>
+          <span>我们在这个房间里说过的话和推进的工作</span>
         </div>
         <Button onClick={onClose} size="sm" type="button" variant="ghost">
           收起
@@ -87,7 +90,7 @@ function ActivityBlock({ block }: { block: CoworkerConversationTimelineBlock }) 
   if (block.kind === "text") {
     return (
       <article className="coworker-activity-log__text" data-status={block.status}>
-        <span>Coworker</span>
+        <span>{DRAWLESS_COWORKER_DISPLAY_NAME}</span>
         <p>{normalizeCoworkerExpression(block.text)}</p>
       </article>
     );
@@ -95,7 +98,6 @@ function ActivityBlock({ block }: { block: CoworkerConversationTimelineBlock }) 
 
   if (block.kind === "tool") {
     const args = formatValue(block.argsText || block.args);
-    const showTechnicalDetails = process.env.NODE_ENV !== "production";
     return (
       <section
         className="coworker-activity-log__tool"
@@ -105,13 +107,13 @@ function ActivityBlock({ block }: { block: CoworkerConversationTimelineBlock }) 
           <strong>{formatToolName(block.toolName)}</strong>
           <span>{formatToolStatus(block.status)}</span>
         </header>
-        {showTechnicalDetails && args ? (
+        {SHOW_DEBUG_UI && args ? (
           <details>
             <summary>查看工作计划</summary>
             <pre>{args}</pre>
           </details>
         ) : null}
-        {showTechnicalDetails && block.result !== null ? (
+        {SHOW_DEBUG_UI && block.result !== null ? (
           <details>
             <summary>查看执行结果</summary>
             <pre>{formatValue(block.result)}</pre>
@@ -121,7 +123,7 @@ function ActivityBlock({ block }: { block: CoworkerConversationTimelineBlock }) 
     );
   }
 
-  if (process.env.NODE_ENV === "production") {
+  if (!SHOW_DEBUG_UI) {
     return null;
   }
 
@@ -143,7 +145,7 @@ function ActivityBlock({ block }: { block: CoworkerConversationTimelineBlock }) 
 
 function getTurnHeading(status: CoworkerConversationTurn["status"]) {
   if (status === "awaiting_approval") {
-    return "Coworker 提交了工作计划";
+    return `${DRAWLESS_COWORKER_DISPLAY_NAME} 提交了工作计划`;
   }
   if (status === "streaming" || status === "receiving") {
     return "我们正在推进这件事";
@@ -159,12 +161,12 @@ function getTurnHeading(status: CoworkerConversationTurn["status"]) {
 
 function formatToolName(toolName: string | null) {
   if (toolName === "collect-canvas-context") {
-    return "Coworker 查看了当前画布";
+    return `${DRAWLESS_COWORKER_DISPLAY_NAME} 查看了当前画布`;
   }
   if (toolName === "edit-canvas") {
-    return "Coworker 准备修改画布";
+    return `${DRAWLESS_COWORKER_DISPLAY_NAME} 准备修改画布`;
   }
-  return "Coworker 准备继续工作";
+  return `${DRAWLESS_COWORKER_DISPLAY_NAME} 准备继续工作`;
 }
 
 function formatTurnStatus(status: CoworkerConversationTurn["status"]) {

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type {
-  DrawlessCanvasViewportContext,
-  DrawlessCoworkerApprovalRequest
+import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
+  type DrawlessCanvasViewportContext,
+  type DrawlessCoworkerApprovalRequest
 } from "@drawless/shared";
 
 import {
@@ -483,7 +484,7 @@ export function useCoworkerConversation(input: {
               status: "cancelled",
               blocks: appendCoworkerConversationTextChunk(
                 turn.blocks,
-                "\n[已停止等待 Coworker 输出]",
+                `\n[已停止等待 ${DRAWLESS_COWORKER_DISPLAY_NAME} 输出]`,
                 createLocalId
               )
             }
@@ -534,19 +535,11 @@ function createLocalId() {
 }
 
 function formatStreamError(error: CoworkerConversationStreamError) {
-  return JSON.stringify(
-    {
-      code: error.code,
-      message: error.message,
-      raw: error.raw
-    },
-    null,
-    2
-  );
+  return error.message;
 }
 
-function formatUnknownError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+function formatUnknownError(_error: unknown) {
+  return `${DRAWLESS_COWORKER_DISPLAY_NAME} 的连接中断了，请稍后重试。`;
 }
 
 function getCoworkerServerUrl() {

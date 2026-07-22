@@ -1,4 +1,5 @@
 import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
   canvasEditRequestSchema,
   canvasEditResultSchema,
   type DrawlessCanvasEditOperation,
@@ -200,7 +201,7 @@ function createGenericApprovalSummary(
     scope: "未知范围",
     structured: false,
     canApprove: false,
-    validationMessage: "请暂不执行，并让 Coworker 重新整理成可验证的计划。"
+    validationMessage: `请暂不执行，并让 ${DRAWLESS_COWORKER_DISPLAY_NAME} 重新整理成可验证的计划。`
   };
 }
 
@@ -213,7 +214,7 @@ function createInvalidCanvasApprovalSummary(): CoworkerApprovalSummary {
     scope: "当前画布",
     structured: false,
     canApprove: false,
-    validationMessage: "请暂不执行，并让 Coworker 重新生成计划。"
+    validationMessage: `请暂不执行，并让 ${DRAWLESS_COWORKER_DISPLAY_NAME} 重新生成计划。`
   };
 }
 

@@ -61,7 +61,7 @@ describe("coworker presence components", () => {
   it("adapts the same composer to delivery feedback without adding a mode switch", () => {
     const html = renderToStaticMarkup(
       <CoworkerComposer
-        label="给 Coworker 反馈"
+        label="给 Drew 反馈"
         message=""
         onFocusChange={vi.fn()}
         onMessageChange={vi.fn()}
@@ -72,7 +72,7 @@ describe("coworker presence components", () => {
       />
     );
 
-    expect(html).toContain("给 Coworker 反馈");
+    expect(html).toContain("给 Drew 反馈");
     expect(html).toContain("哪里需要继续修改？");
     expect(html).not.toContain("切换模式");
   });

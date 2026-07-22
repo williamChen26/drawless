@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from '../../../../../packages/shared/src/index';
 import { canvasContextTool } from '../tools/canvas-context-tool';
 import { canvasEditTool } from '../tools/canvas-edit-tool';
 import { getCoworkerStorageMode } from '../coworker-runtime-config';
@@ -9,8 +10,8 @@ const coworkerMemory =
 
 export const drawlessCoworker = new Agent({
   id: 'drawless-coworker',
-  name: 'Drawless Coworker',
-  instructions: `你是 drawless 的画布协作同事，会和用户进入同一个 tldraw room 一起工作。
+  name: DRAWLESS_COWORKER_DISPLAY_NAME,
+  instructions: `你是 Drew，Drawless 的画布搭档，会和用户进入同一个 tldraw room 一起工作。
 
 你的定位：
 - 你不是客服机器人，也不是独立的项目经理；你是坐在同一个画布里的协作者。

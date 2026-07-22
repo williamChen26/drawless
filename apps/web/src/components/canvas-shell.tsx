@@ -22,7 +22,9 @@ import {
 } from "./collaboration-state";
 import { CoworkerConversationWindow } from "./coworker-conversation-window";
 import { useCoworkerControl } from "./coworker-control-state";
-import { useRoomShare } from "./room-share-state";
+
+const TLDRAW_LICENSE_KEY =
+  "tldraw-2026-09-30/WyJUSG9jenplMSIsWyIqIl0sMTYsIjIwMjYtMDktMzAiXQ.uxnHwI7nKxk3KwhNGpIcRZCphK02Kyhc4BDMbbZZ1FtJcYfIz0LgVY34aH50SH7RqyL7pFnbGgzuyydfbguWVg";
 
 export function CanvasShell({ roomId }: { roomId: string }) {
   const isClientReady = useClientReady();
@@ -38,8 +40,9 @@ export function CanvasShell({ roomId }: { roomId: string }) {
         })}
       >
         <WorkspaceMessage
-          title="Preparing collaborative canvas"
-          value={{ state: "hydrating-client" }}
+          title="正在准备协作画布"
+          detail="画布即将就绪。"
+          debugValue={{ state: "hydrating-client" }}
         />
       </CanvasShellFrame>
     );
@@ -55,14 +58,22 @@ export function CanvasShell({ roomId }: { roomId: string }) {
       <CanvasShellFrame statusView={statusView}>
         <WorkspaceMessage
           role="alert"
-          title={collaboration.error.message}
-          value={collaboration.error}
+          title="画布暂时无法打开"
+          detail={collaboration.error.message}
+          debugValue={collaboration.error}
+          onRetry={() => window.location.reload()}
         />
       </CanvasShellFrame>
     );
   }
 
-  return <SyncedCanvasShell collaboration={collaboration} />;
+  // 房间是所有本地协作状态的生命周期边界；切房时整体重建，避免旧请求和 UI 状态串入新房间。
+  return (
+    <SyncedCanvasShell
+      collaboration={collaboration}
+      key={collaboration.roomId}
+    />
+  );
 }
 
 function SyncedCanvasShell({
@@ -81,7 +92,6 @@ function SyncedCanvasShell({
       store.status === "synced-remote" ? store.connectionStatus : undefined,
     errorMessage: store.status === "error" ? store.error.message : undefined
   });
-  const share = useRoomShare(collaboration.roomId);
   const coworker = useCoworkerControl(collaboration.roomId);
   const editorRef = useRef<Editor | null>(null);
 
@@ -90,12 +100,12 @@ function SyncedCanvasShell({
       <CanvasShellFrame
         statusView={statusView}
         participantLabel={collaboration.participantLabel}
-        share={share}
         coworker={coworker}
       >
         <WorkspaceMessage
-          title="Connecting collaborative canvas"
-          value={statusView.raw}
+          title="正在连接协作画布"
+          detail="正在进入这个共享房间。"
+          debugValue={statusView.debugValue}
         />
       </CanvasShellFrame>
     );
@@ -106,13 +116,14 @@ function SyncedCanvasShell({
       <CanvasShellFrame
         statusView={statusView}
         participantLabel={collaboration.participantLabel}
-        share={share}
         coworker={coworker}
       >
         <WorkspaceMessage
           role="alert"
-          title={statusView.detail}
-          value={statusView.raw}
+          title="协作画布暂时不可用"
+          detail={statusView.detail}
+          debugValue={statusView.debugValue}
+          onRetry={() => window.location.reload()}
         />
       </CanvasShellFrame>
     );
@@ -122,13 +133,12 @@ function SyncedCanvasShell({
     <CanvasShellFrame
       statusView={statusView}
       participantLabel={collaboration.participantLabel}
-      share={share}
       coworker={coworker}
     >
       <div className="canvas-shell__editor" data-testid="tldraw-host">
         <Tldraw
           store={store}
-          licenseKey={'tldraw-2026-09-30/WyJUSG9jenplMSIsWyIqIl0sMTYsIjIwMjYtMDktMzAiXQ.uxnHwI7nKxk3KwhNGpIcRZCphK02Kyhc4BDMbbZZ1FtJcYfIz0LgVY34aH50SH7RqyL7pFnbGgzuyydfbguWVg'}
+          licenseKey={TLDRAW_LICENSE_KEY}
           onMount={(editor) => {
             editorRef.current = editor;
           }}
@@ -136,6 +146,7 @@ function SyncedCanvasShell({
         <CoworkerConversationWindow
           coworker={coworker}
           roomId={collaboration.roomId}
+          syncOnline={statusView.state === "online"}
           getCanvasViewport={() => createCanvasViewportContext(editorRef.current)}
           onLocateResult={(recordIds) =>
             locateCanvasResult(editorRef.current, recordIds)
@@ -202,8 +213,6 @@ function createCollaborationStatusView(input: {
   storeStatus:
     | "loading"
     | "synced-remote"
-    | "synced-local"
-    | "not-synced"
     | "error"
     | "configuration-error";
   connectionStatus?: "online" | "offline" | undefined;
@@ -211,22 +220,25 @@ function createCollaborationStatusView(input: {
 }): CollaborationStatusView {
   if (input.storeStatus === "loading") {
     return {
-      label: "Connecting sync",
+      label: "正在连接",
       state: "connecting",
-      detail: "Opening the collaborative tldraw room.",
-      raw: {
+      detail: "正在连接 tldraw 协作房间。",
+      debugValue: {
         storeStatus: input.storeStatus,
         connectionStatus: input.connectionStatus ?? null
       }
     };
   }
 
-  if (input.storeStatus === "synced-remote" && input.connectionStatus === "online") {
+  if (input.storeStatus === "synced-remote") {
+    const isOnline = input.connectionStatus === "online";
     return {
-      label: "Backend sync",
-      state: "online",
-      detail: "Connected to the dedicated tldraw sync backend.",
-      raw: {
+      label: isOnline ? "协作已连接" : "离线重连中",
+      state: isOnline ? "online" : "offline",
+      detail: isOnline
+        ? "已连接 tldraw 协作服务。"
+        : "网络连接已中断，画布仍可查看，恢复网络后会自动重连。",
+      debugValue: {
         storeStatus: input.storeStatus,
         connectionStatus: input.connectionStatus
       }
@@ -234,12 +246,10 @@ function createCollaborationStatusView(input: {
   }
 
   return {
-    label: "Sync raw error",
+    label: "协作连接错误",
     state: "error",
-    detail:
-      input.errorMessage ??
-      "Collaborative canvas is unavailable because sync state is invalid.",
-    raw: {
+    detail: "请检查网络连接，稍后重试；如果问题持续，请联系管理员。",
+    debugValue: {
       storeStatus: input.storeStatus,
       connectionStatus: input.connectionStatus ?? null,
       errorMessage: input.errorMessage ?? null

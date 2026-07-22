@@ -1,24 +1,24 @@
 # drawless
 
-drawless 是一块由人和数字同事共同参与的协作画布。除了与其他用户实时编辑同一个 tldraw room，用户还可以直接找到驻留在画布中的 Coworker，与他聊天、讨论想法、交代工作、反馈结果、审核计划并接收交付。
+drawless 是一块由人和数字同事共同参与的协作画布。除了与其他用户实时编辑同一个 tldraw room，用户还可以直接找到驻留在画布中的 Drew，与这位画布搭档聊天、讨论想法、交代工作、反馈结果、审核计划并接收交付。
 
-Coworker 不是带 session 列表和“新建会话”的通用 AI Chat。人物代表一位持续存在的同事，room 代表共同工作的场所；一次回复结束、关闭交流界面或页面刷新，都不应在产品心智上重置双方关系。
+Drew 不是带 session 列表和“新建会话”的通用 AI Chat。人物代表一位持续存在的同事，room 代表共同工作的场所；一次回复结束、关闭交流界面或页面刷新，都不应在产品心智上重置双方关系。
 
-详细定位见 [Drawless Coworker 产品定位](./specs/coworker-product-positioning.md)。
+详细定位和命名边界见 [Drew 产品定位](./specs/coworker-product-positioning.md)。
 
 ## 产品目标
 
-- 使用 tldraw 作为人与 Coworker 共同工作的唯一画布事实源。
-- 通过 tldraw sync 让用户、其他协作者和 Coworker 进入同一个 room。
+- 使用 tldraw 作为人与 Drew 共同工作的唯一画布事实源。
+- 通过 tldraw sync 让用户、其他协作者和 Drew 进入同一个 room。
 - 让普通聊天、工作交代、反馈、计划审核、执行和交付形成连续的同事协作体验。
 - 让正式画布操作经过结构化计划与明确审批，避免从模糊对话中获得隐式授权。
-- 将共享契约统一放在 `packages/shared`，避免前端、server 和 Coworker 各自定义一套事实。
+- 将共享契约统一放在 `packages/shared`，避免前端、server 和 coworker runtime 各自定义一套事实。
 
 ## 产品边界
 
 - 不做带 session 侧栏和“新建对话”的通用 AI Chat。
-- 不把 Coworker 做成只接收命令、每条消息都触发执行的任务机器人。
-- 不让 Coworker 绕过审批和协同边界直接修改画布。
+- 不把 Drew 做成只接收命令、每条消息都触发执行的任务机器人。
+- 不让 Drew 绕过审批和协同边界直接修改画布。
 - 不做复杂权限、账号、空间管理。
 - 不做生产级资产存储。
 - 不做持久化协同存储；当前房间数据只存在当前 Node 进程内。
@@ -30,7 +30,7 @@ drawless/
   apps/
     web/       Next.js 前端，负责路由、tldraw 挂载、协同客户端连接
     server/    Fastify 后端，负责 tldraw sync WebSocket 房间
-    coworker/  Mastra Coworker，负责画布观察、沟通、计划与受控操作
+    coworker/  Drew 的 Mastra runtime，负责画布观察、沟通、计划与受控操作
   packages/
     shared/    共享类型、Zod schema、房间、审批和画布操作契约
 ```
@@ -95,12 +95,13 @@ pnpm check
 - `apps/server`：单测、类型检查、构建、协同 smoke 测试。
 - `apps/web`：单测、类型检查、Next 构建。
 
-## Coworker 边界
+## Drew 与 coworker runtime 边界
 
 - 共享契约入口：`packages/shared/src/index.ts`
-- Coworker 需要理解画布时，通过只读上下文工具观察 tldraw document。
-- Coworker 需要修改画布时，通过受控编辑工具提交计划并等待明确审批。
+- Drew 需要理解画布时，由 coworker runtime 通过只读上下文工具观察 tldraw document。
+- Drew 需要修改画布时，由 coworker runtime 通过受控编辑工具提交计划并等待明确审批。
 - 底层可以使用 thread、run 或 sessionId 完成技术控制，但这些概念不进入用户可见的信息架构。
+- `Drew` 是用户可见姓名，`画布搭档` 是角色说明；`coworker` 只用于代码、接口和部署配置。
 
 ## tldraw sync 取舍
 

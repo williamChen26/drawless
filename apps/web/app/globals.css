@@ -39,15 +39,12 @@ select {
 }
 
 .drawless-ui-button:focus-visible,
-.drawless-ui-input:focus-visible,
-.drawless-ui-textarea:focus-visible,
-.drawless-ui-dialog-content:focus-visible {
+.drawless-ui-textarea:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
 
 .drawless-ui-button:disabled,
-.drawless-ui-input:disabled,
 .drawless-ui-textarea:disabled {
   cursor: not-allowed;
   opacity: 0.56;
@@ -87,19 +84,6 @@ select {
   padding: 0;
 }
 
-.drawless-ui-input {
-  width: 100%;
-  height: 34px;
-  min-width: 0;
-  border: 1px solid #c9c9c9;
-  border-radius: 6px;
-  background: #fff;
-  color: #111;
-  font: inherit;
-  font-size: 14px;
-  padding: 0 10px;
-}
-
 .drawless-ui-textarea {
   width: 100%;
   min-width: 0;
@@ -112,57 +96,6 @@ select {
   line-height: 1.45;
   padding: 9px 10px;
   resize: vertical;
-}
-
-/* Dialog 使用 Radix 负责可访问性，这里只控制遮罩、尺寸和 drawless 当前调试壳层的克制视觉。 */
-.drawless-ui-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: rgb(17 17 17 / 28%);
-}
-
-.drawless-ui-dialog-content {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  z-index: 41;
-  display: grid;
-  gap: 16px;
-  width: min(420px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
-  transform: translate(-50%, -50%);
-  border: 1px solid #d7d7d7;
-  border-radius: 8px;
-  background: #fff;
-  color: #111;
-  padding: 18px;
-  box-shadow: 0 24px 60px rgb(17 17 17 / 20%);
-}
-
-.drawless-ui-dialog-header,
-.drawless-ui-dialog-footer {
-  display: grid;
-  gap: 8px;
-}
-
-.drawless-ui-dialog-footer {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-}
-
-.drawless-ui-dialog-title {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.25;
-}
-
-.drawless-ui-dialog-description {
-  margin: 0;
-  color: #555;
-  font-size: 14px;
-  line-height: 1.5;
 }
 
 .canvas-shell {
@@ -202,8 +135,7 @@ select {
 }
 
 .canvas-shell__pill,
-.canvas-shell__identity,
-.canvas-shell__share {
+.canvas-shell__identity {
   display: inline-flex;
   align-items: center;
   max-width: 240px;
@@ -265,6 +197,34 @@ select {
   display: block;
   margin-bottom: 10px;
   font-size: 14px;
+}
+
+.canvas-shell__message p {
+  margin: 0;
+  color: #555;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.canvas-shell__message details {
+  margin-top: 12px;
+}
+
+.canvas-shell__message-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-top: 16px;
+  border: 1px solid #111;
+  background: #111;
+  color: #fff;
+  padding: 0 14px;
+  text-decoration: none;
+}
+
+.canvas-shell__message-action:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .canvas-shell__message pre {
@@ -635,7 +595,7 @@ select {
 }
 
 .coworker-approval-sheet dt {
-  color: #887553;
+  color: #745f3d;
 }
 
 .coworker-approval-sheet dd {

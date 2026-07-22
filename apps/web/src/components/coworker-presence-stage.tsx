@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import type { DrawlessCoworkerApprovalRequest } from "@drawless/shared";
+import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
+  DRAWLESS_COWORKER_ROLE_LABEL,
+  type DrawlessCoworkerApprovalRequest
+} from "@drawless/shared";
 import { Button } from "@drawless/ui";
 
 import type { CoworkerAvatarMode } from "../lib/coworker-avatar-state";
@@ -55,7 +59,7 @@ export type CoworkerPresenceStageProps = {
   surface: CoworkerWorkspaceSurface;
   /** 工作记录 DOM ID。 */
   activityLogId: string;
-  /** 最近一次提交给 Coworker 的原始文本。 */
+  /** 最近一次提交给 Drew 的原始文本。 */
   latestUserText: string | null;
   /** 只用于表现交接过程的短暂纸带，不作为业务事实源。 */
   handoff: { id: number; text: string } | null;
@@ -71,6 +75,8 @@ export type CoworkerPresenceStageProps = {
   message: string;
   /** 当前任务是否阻止再次发送。 */
   sendDisabled: boolean;
+  /** tldraw 是否与当前协作房间保持在线同步。 */
+  syncOnline?: boolean;
   /** 是否展示停止接收当前回复的动作。 */
   canCancel: boolean;
   /** coworker 是否已经加入当前画布。 */
@@ -141,6 +147,7 @@ export function CoworkerPresenceStage({
   resultRecordIds,
   message,
   sendDisabled,
+  syncOnline = true,
   canCancel,
   online,
   joining,
@@ -179,7 +186,7 @@ export function CoworkerPresenceStage({
 
   return (
     <section
-      aria-label="Coworker 协作空间"
+      aria-label={`与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的协作空间`}
       className="coworker-presence-stage"
       data-handoff={Boolean(handoff)}
       data-phase={phase}
@@ -222,6 +229,7 @@ export function CoworkerPresenceStage({
         {artifact.kind === "approval" && pendingApproval ? (
           <CoworkerApprovalSheet
             approvalView={pendingApproval}
+            disabled={!syncOnline}
             onRequestAdjustment={onRequestApprovalAdjustment}
             onResolve={onResolveApproval}
           />
@@ -259,23 +267,27 @@ export function CoworkerPresenceStage({
 
         {!online && composerOpen ? (
           <section
-            aria-label="允许 Coworker 加入"
+            aria-label={`允许 ${DRAWLESS_COWORKER_DISPLAY_NAME} 加入`}
             className="coworker-join-note"
           >
             <div>
-              <strong>让我来到画布里</strong>
-              <p>加入后我会以协作者身份读取画布，只在你确认后执行编辑。</p>
+              <strong>{DRAWLESS_COWORKER_DISPLAY_NAME} · {DRAWLESS_COWORKER_ROLE_LABEL}</strong>
+              <p>允许后，我会作为协作者读取当前画布；需要编辑时，会先请你确认。</p>
             </div>
             {joinError ? <p role="alert">{joinError}</p> : null}
-            <Button disabled={joining} onClick={onJoin} type="button">
-              {joining ? "正在加入" : "允许加入"}
+            <Button
+              disabled={joining || !syncOnline}
+              onClick={onJoin}
+              type="button"
+            >
+              {!syncOnline ? "等待画布同步" : joining ? "正在加入" : "允许加入"}
             </Button>
           </section>
         ) : null}
 
         {online && composerOpen ? (
           <section
-            aria-label="与 Coworker 沟通"
+            aria-label={`与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 沟通`}
             className="coworker-presence-stage__composer"
           >
             <header className="coworker-presence-stage__composer-header">
@@ -284,7 +296,7 @@ export function CoworkerPresenceStage({
                 <strong>{statusText}</strong>
               </div>
               <Button
-                aria-label="收起与 Coworker 的沟通入口"
+                aria-label={`收起与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的沟通入口`}
                 onClick={onCloseSurface}
                 size="sm"
                 type="button"
@@ -294,7 +306,11 @@ export function CoworkerPresenceStage({
               </Button>
             </header>
             <CoworkerComposer
-              busyHint={getComposerBusyHint(phase)}
+              busyHint={
+                syncOnline
+                  ? getComposerBusyHint(phase)
+                  : "画布正在重新连接，恢复同步后再继续。"
+              }
               label={composerCopy.label}
               message={message}
               onFocusChange={onComposerFocusChange}
@@ -308,7 +324,7 @@ export function CoworkerPresenceStage({
         ) : null}
 
         <div
-          aria-label="Coworker 辅助操作"
+          aria-label={`${DRAWLESS_COWORKER_DISPLAY_NAME} 的辅助操作`}
           className="coworker-presence-actions"
           role="group"
         >
@@ -358,7 +374,7 @@ export function CoworkerPresenceStage({
         role="status"
       >
         {showReceipt
-          ? `Coworker 已完成：${completionSummary}`
+          ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 已完成：${completionSummary}`
           : statusText}
       </p>
     </section>
@@ -367,10 +383,12 @@ export function CoworkerPresenceStage({
 
 function CoworkerApprovalSheet({
   approvalView,
+  disabled,
   onResolve,
   onRequestAdjustment
 }: {
   approvalView: CoworkerPendingApprovalView;
+  disabled: boolean;
   onResolve: CoworkerPresenceStageProps["onResolveApproval"];
   onRequestAdjustment: CoworkerPresenceStageProps["onRequestApprovalAdjustment"];
 }) {
@@ -406,7 +424,7 @@ function CoworkerApprovalSheet({
 
   return (
     <section
-      aria-label="Coworker 等待你的确认"
+      aria-label={`${DRAWLESS_COWORKER_DISPLAY_NAME} 等待你的确认`}
       className="coworker-approval-sheet"
       data-pending={Boolean(pendingAction)}
     >
@@ -443,7 +461,7 @@ function CoworkerApprovalSheet({
       ) : null}
       <div className="coworker-approval-sheet__actions">
         <Button
-          disabled={Boolean(pendingAction) || !plan.canApprove}
+          disabled={disabled || Boolean(pendingAction) || !plan.canApprove}
           onClick={() => void resolve("approve")}
           type="button"
         >
@@ -454,7 +472,7 @@ function CoworkerApprovalSheet({
               : "计划不可执行"}
         </Button>
         <Button
-          disabled={Boolean(pendingAction)}
+          disabled={disabled || Boolean(pendingAction)}
           onClick={() => void requestAdjustment()}
           type="button"
           variant="secondary"
@@ -462,7 +480,7 @@ function CoworkerApprovalSheet({
           {pendingAction === "adjust" ? "正在收回计划" : "调整一下"}
         </Button>
         <Button
-          disabled={Boolean(pendingAction)}
+          disabled={disabled || Boolean(pendingAction)}
           onClick={() => void resolve("decline")}
           type="button"
           variant="ghost"
@@ -485,16 +503,16 @@ function isExpressionPhase(phase: CoworkerPresencePhase) {
 
 function getComposerBusyHint(phase: CoworkerPresencePhase) {
   if (phase === "awaiting-approval") {
-    return "Coworker 正等你确认。可以先写下疑问或调整，处理计划后再递给他。";
+    return `${DRAWLESS_COWORKER_DISPLAY_NAME} 正等你确认。可以先写下疑问或调整，处理计划后再递给他。`;
   }
-  return "Coworker 还在处理。可以先写下来，当前步骤结束后再递给他。";
+  return `${DRAWLESS_COWORKER_DISPLAY_NAME} 还在处理。可以先写下来，当前步骤结束后再递给他。`;
 }
 
 function getComposerCopy(purpose: CoworkerComposerPurpose) {
   if (purpose === "plan-adjustment") {
     return {
       title: "调整工作计划",
-      label: "告诉 Coworker 怎么调整",
+      label: `告诉 ${DRAWLESS_COWORKER_DISPLAY_NAME} 怎么调整`,
       placeholder: "说说要改的地方，我会重新整理计划",
       sendLabel: "请他重整"
     };
@@ -502,14 +520,14 @@ function getComposerCopy(purpose: CoworkerComposerPurpose) {
   if (purpose === "delivery-feedback") {
     return {
       title: "反馈这次交付",
-      label: "给 Coworker 反馈",
+      label: `给 ${DRAWLESS_COWORKER_DISPLAY_NAME} 反馈`,
       placeholder: "哪里需要保留、修改或继续补充？",
       sendLabel: "递给他"
     };
   }
   return {
-    title: "与 Coworker 沟通",
-    label: "写给 Coworker",
+    title: `与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 沟通`,
+    label: `写给 ${DRAWLESS_COWORKER_DISPLAY_NAME}`,
     placeholder: "聊聊你的想法，或者把要做的事交代给我",
     sendLabel: "递给他"
   };

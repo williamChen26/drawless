@@ -9,6 +9,7 @@ import type {
   DrawlessStorageSummary
 } from "@drawless/shared";
 import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
   coworkerApprovalIdSchema,
   coworkerApprovalListQuerySchema,
   coworkerApprovalResolutionRequestSchema,
@@ -75,6 +76,9 @@ const storageSummary: DrawlessStorageSummary = {
   note:
     "@tldraw/sync-core 为每个 TLSocketRoom 使用 InMemorySyncStorage；重启进程会清空房间。"
 };
+
+const DREW_UNAVAILABLE_MESSAGE =
+  `${DRAWLESS_COWORKER_DISPLAY_NAME} 暂时不可用，请稍后再试。`;
 
 /**
  * 构建只包含 tldraw 协同能力的 Fastify 应用。
@@ -145,7 +149,7 @@ export async function createServerApp({
       if (!config.coworker.enabled || !resolvedCoworkerClient) {
         return reply.code(503).send({
           ok: false,
-          error: "Coworker control is disabled."
+          error: DREW_UNAVAILABLE_MESSAGE
         });
       }
 
@@ -168,7 +172,7 @@ export async function createServerApp({
       if (!config.coworker.enabled || !resolvedCoworkerClient) {
         return reply.code(503).send({
           ok: false,
-          error: "Coworker control is disabled."
+          error: DREW_UNAVAILABLE_MESSAGE
         });
       }
 
@@ -204,7 +208,7 @@ export async function createServerApp({
       if (!config.coworker.enabled || !resolvedCoworkerClient) {
         return reply.code(503).send({
           ok: false,
-          error: "Coworker control is disabled."
+          error: DREW_UNAVAILABLE_MESSAGE
         });
       }
 
@@ -289,7 +293,7 @@ export async function createServerApp({
       if (!config.coworker.enabled || !resolvedCoworkerClient) {
         return reply.code(503).send({
           ok: false,
-          error: "Coworker control is disabled."
+          error: DREW_UNAVAILABLE_MESSAGE
         });
       }
 
@@ -356,7 +360,7 @@ export async function createServerApp({
       if (!config.coworker.enabled || !resolvedCoworkerClient) {
         return reply.code(503).send({
           ok: false,
-          error: "Coworker control is disabled."
+          error: DREW_UNAVAILABLE_MESSAGE
         });
       }
 

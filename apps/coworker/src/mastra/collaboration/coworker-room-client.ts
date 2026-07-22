@@ -18,6 +18,7 @@ import {
 import WebSocket from 'ws';
 
 import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
   createDrawlessCoworkerSessionId,
   parseDrawlessRoomId,
   type DrawlessCanvasEditRequest,
@@ -101,7 +102,7 @@ export function createDrawlessCoworkerRoomClient(
   const identity: DrawlessCoworkerIdentity = {
     roomId,
     sessionId,
-    displayName: options.displayName?.trim() || 'Drawless Coworker',
+    displayName: options.displayName?.trim() || DRAWLESS_COWORKER_DISPLAY_NAME,
     color: options.color?.trim() || '#2563eb',
     instanceId,
   };

@@ -33,6 +33,7 @@ const INITIAL_WORKSPACE_SURFACE: CoworkerWorkspaceSurface = { kind: "closed" };
 export function CoworkerConversationWindow({
   roomId,
   coworker,
+  syncOnline,
   getCanvasViewport,
   onLocateResult
 }: {
@@ -40,6 +41,8 @@ export function CoworkerConversationWindow({
   roomId: string;
   /** 当前 room 的 coworker 生命周期状态和控制动作。 */
   coworker: CoworkerControlState;
+  /** tldraw 是否与当前协作房间保持在线同步。 */
+  syncOnline: boolean;
   /** 发送消息时读取用户当前画布可视区。 */
   getCanvasViewport?: () => DrawlessCanvasViewportContext | null;
   /** 在 tldraw 中定位工具真实返回的 record IDs。 */
@@ -204,6 +207,9 @@ export function CoworkerConversationWindow({
   }, [pendingApproval, surface.kind]);
 
   const join = () => {
+    if (!syncOnline) {
+      return;
+    }
     void coworker.start({
       // 新的在场入口已经承担入场引导，避免旧 cursor chat 与沟通面板重叠。
       sendIntroCursorChat: false,
@@ -213,6 +219,9 @@ export function CoworkerConversationWindow({
   };
 
   const sendMessage = () => {
+    if (!syncOnline) {
+      return Promise.resolve();
+    }
     const submittedMessage = conversation.message.trim();
     const shouldAnimateHandoff = Boolean(submittedMessage) && !conversation.busy;
     // 请求立即开始；Composer 让位给当前工作物件，让交接和执行状态保持在同一处。
@@ -292,6 +301,9 @@ export function CoworkerConversationWindow({
         onMessageChange={conversation.setMessage}
         onOpenComposer={() => openComposer()}
         onRequestApprovalAdjustment={async ({ turn, approval }) => {
+          if (!syncOnline) {
+            return;
+          }
           const planReleased = await conversation.resolveToolApproval(
             turn,
             approval,
@@ -302,7 +314,11 @@ export function CoworkerConversationWindow({
           }
         }}
         onRequestDeliveryFeedback={() => openComposer("delivery-feedback")}
-        onResolveApproval={conversation.resolveToolApproval}
+        onResolveApproval={(turn, approval, decision) =>
+          syncOnline
+            ? conversation.resolveToolApproval(turn, approval, decision)
+            : Promise.resolve(false)
+        }
         onSend={sendMessage}
         onShowActivity={() => {
           acknowledgeCurrentPresentation();
@@ -317,9 +333,10 @@ export function CoworkerConversationWindow({
         pendingApproval={pendingApproval}
         phase={presence.phase}
         resultRecordIds={result?.recordIds ?? []}
-        sendDisabled={conversation.busy}
+        sendDisabled={conversation.busy || !syncOnline}
         statusText={presence.statusText}
         surface={surface}
+        syncOnline={syncOnline}
         workspaceId={COWORKER_WORKSPACE_ID}
       />
 

@@ -3,13 +3,13 @@ import React from "react";
 import styles from "./coworker-paper-handoff.module.css";
 
 export type CoworkerPaperHandoffProps = {
-  /** 正在交给 Coworker 的用户文本。 */
+  /** 正在交给 Drew 的用户文本。 */
   text: string;
 };
 
 /**
  * 纯展示的纸带交接动效。
- * 业务状态和无障碍播报由外层负责，这里只表现信息从 exchange 流向 Coworker 的空间关系。
+ * 业务状态和无障碍播报由外层负责，这里只表现信息从 exchange 流向 Drew 的空间关系。
  */
 export function CoworkerPaperHandoff({ text }: CoworkerPaperHandoffProps) {
   return (

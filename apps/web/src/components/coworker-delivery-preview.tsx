@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 import { Button } from "@drawless/ui";
 
 export function CoworkerDeliveryPreview({
@@ -16,7 +17,7 @@ export function CoworkerDeliveryPreview({
   recordIds: string[];
   /** 展开完整工作说明。 */
   onExpand: () => void;
-  /** 就当前交付继续给 Coworker 反馈。 */
+  /** 就当前交付继续给 Drew 反馈。 */
   onRequestChanges: () => void;
   /** 在画布中定位真实工作结果。 */
   onLocateResult?: ((recordIds: string[]) => void) | undefined;
@@ -26,7 +27,7 @@ export function CoworkerDeliveryPreview({
 
   return (
     <article
-      aria-label="Coworker 的画布交付"
+      aria-label={`${DRAWLESS_COWORKER_DISPLAY_NAME} 的画布交付`}
       className="coworker-delivery-preview"
     >
       <header>

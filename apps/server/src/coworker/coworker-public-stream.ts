@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import type { DrawlessRoomId } from "@drawless/shared";
+import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
+  type DrawlessRoomId
+} from "@drawless/shared";
 
 import type {
   CoworkerApprovalLease,
@@ -85,7 +88,7 @@ export function createCoworkerPublicEventStream(input: {
         return encodePublicStreamError(
           error instanceof Error
             ? error.message
-            : "Coworker approval registration failed."
+            : `无法准备 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的确认计划。`
         );
       }
     }

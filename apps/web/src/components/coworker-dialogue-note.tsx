@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 
 import { normalizeCoworkerExpression } from "../lib/coworker-presence-content";
 import type { CoworkerPresencePhase } from "../lib/coworker-presence-state";
@@ -58,20 +59,20 @@ function getDialogueEyebrow(phase: CoworkerDialoguePhase) {
   if (phase === "interrupted") {
     return "先停在这里";
   }
-  return "Coworker";
+  return DRAWLESS_COWORKER_DISPLAY_NAME;
 }
 
 function getDialogueLabel(phase: CoworkerDialoguePhase) {
   if (phase === "speaking") {
-    return "Coworker 正在回应";
+    return `${DRAWLESS_COWORKER_DISPLAY_NAME} 正在回应`;
   }
   if (phase === "error") {
-    return "Coworker 的回应遇到问题";
+    return `${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应遇到问题`;
   }
   if (phase === "interrupted") {
-    return "Coworker 已停止当前回应";
+    return `${DRAWLESS_COWORKER_DISPLAY_NAME} 已停止当前回应`;
   }
-  return "Coworker 的回应";
+  return `${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应`;
 }
 
 function createDialoguePreview(text: string, maxLength = 220) {

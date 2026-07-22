@@ -49,7 +49,7 @@ describe("server app", () => {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({
       ok: false,
-      error: "Coworker control is disabled."
+      error: "Drew 暂时不可用，请稍后再试。"
     });
 
     await app.close();

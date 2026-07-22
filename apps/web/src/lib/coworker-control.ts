@@ -1,4 +1,5 @@
 import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
   coworkerRoomStatusResponseSchema,
   coworkerStopResponseSchema,
   parseDrawlessRoomId,
@@ -126,7 +127,7 @@ export function resolveCoworkerControlServerUrl(
         ok: false,
         error: {
           code: "INVALID_SERVER_URL",
-          message: "Coworker control server URL must use http, https, ws, or wss.",
+          message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 的连接地址格式不受支持。`,
           raw: rawUrl
         }
       };
@@ -141,7 +142,7 @@ export function resolveCoworkerControlServerUrl(
       ok: false,
       error: {
         code: "INVALID_SERVER_URL",
-        message: "Coworker control server URL must be absolute.",
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 的连接地址配置不完整。`,
         raw: error
       }
     };
@@ -196,7 +197,9 @@ async function sendCoworkerControlRequest<T>(input: {
       ok: false,
       error: {
         code: "HTTP_ERROR",
-        message: extractErrorMessage(payload) ?? `Coworker control returned ${response.status}.`,
+        message:
+          extractErrorMessage(payload) ??
+          `暂时无法连接 ${DRAWLESS_COWORKER_DISPLAY_NAME}（${response.status}）。`,
         raw: payload
       }
     };
@@ -208,7 +211,7 @@ async function sendCoworkerControlRequest<T>(input: {
       ok: false,
       error: {
         code: "INVALID_RESPONSE",
-        message: "Coworker control response did not match shared schema.",
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 的连接服务返回了无法识别的数据。`,
         raw: parsed.error
       }
     };

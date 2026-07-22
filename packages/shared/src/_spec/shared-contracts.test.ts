@@ -18,6 +18,8 @@ import {
   coworkerStartRequestSchema,
   coworkerStopResponseSchema,
   createDrawlessCoworkerSessionId,
+  DRAWLESS_COWORKER_DISPLAY_NAME,
+  DRAWLESS_COWORKER_ROLE_LABEL,
   parseDrawlessRoomId,
   parseDrawlessCoworkerSessionId,
   parseDrawlessSessionId,
@@ -40,6 +42,9 @@ describe("drawless shared contracts", () => {
   });
 
   it("validates coworker identity and session ids", () => {
+    expect(DRAWLESS_COWORKER_DISPLAY_NAME).toBe("Drew");
+    expect(DRAWLESS_COWORKER_ROLE_LABEL).toBe("画布搭档");
+
     const sessionId = createDrawlessCoworkerSessionId({
       roomId: "alpha",
       instanceId: "instance-1"
@@ -56,7 +61,7 @@ describe("drawless shared contracts", () => {
       coworkerIdentitySchema.parse({
         roomId: "alpha",
         sessionId,
-        displayName: "Drawless Coworker",
+        displayName: DRAWLESS_COWORKER_DISPLAY_NAME,
         color: "#2563eb",
         instanceId: "instance-1"
       })
@@ -94,7 +99,7 @@ describe("drawless shared contracts", () => {
       identity: {
         roomId: "alpha",
         sessionId,
-        displayName: "Drawless Coworker",
+        displayName: DRAWLESS_COWORKER_DISPLAY_NAME,
         color: "#2563eb",
         instanceId: "instance-1"
       },
@@ -147,7 +152,7 @@ describe("drawless shared contracts", () => {
 
     expect(
       serverCoworkerStartRequestSchema.parse({
-        displayName: "Drawless Coworker",
+        displayName: DRAWLESS_COWORKER_DISPLAY_NAME,
         waitUntilLoaded: false,
         sendIntroCursorChat: true
       })

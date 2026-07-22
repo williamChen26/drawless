@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 import { Button } from "@drawless/ui";
 
 import styles from "./coworker-result-note.module.css";
@@ -36,19 +37,19 @@ const phaseCopy: Record<
 > = {
   speaking: {
     eyebrow: "正在写给你",
-    liveLabel: "Coworker 正在说明工作结果"
+    liveLabel: `${DRAWLESS_COWORKER_DISPLAY_NAME} 正在说明工作结果`
   },
   completed: {
     eyebrow: "交付给你",
-    liveLabel: "Coworker 已完成工作"
+    liveLabel: `${DRAWLESS_COWORKER_DISPLAY_NAME} 已完成工作`
   },
   interrupted: {
     eyebrow: "先停在这里",
-    liveLabel: "Coworker 已停止本次工作"
+    liveLabel: `${DRAWLESS_COWORKER_DISPLAY_NAME} 已停止本次工作`
   },
   error: {
     eyebrow: "交付异常",
-    liveLabel: "Coworker 本次工作遇到问题"
+    liveLabel: `${DRAWLESS_COWORKER_DISPLAY_NAME} 本次工作遇到问题`
   }
 };
 
@@ -102,7 +103,7 @@ export function CoworkerResultNote({
       </header>
 
       <div
-        aria-label="Coworker 工作说明正文"
+        aria-label={`${DRAWLESS_COWORKER_DISPLAY_NAME} 工作说明正文`}
         aria-live="off"
         className={styles.copy}
         tabIndex={0}

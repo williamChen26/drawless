@@ -1,4 +1,5 @@
 import type { CoworkerConversationStatus } from "./coworker-conversation-state";
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 
 export type CoworkerAvatarMode =
   | "idle"
@@ -79,7 +80,7 @@ export function getCoworkerAvatarLabel(mode: CoworkerAvatarMode) {
   if (mode === "listening") {
     return "我在听";
   }
-  return "找 Coworker";
+  return `找 ${DRAWLESS_COWORKER_DISPLAY_NAME}`;
 }
 
 export function getNextWorkingFrame(

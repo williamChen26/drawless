@@ -112,7 +112,7 @@ describe("coworker control client", () => {
       new Response(
         JSON.stringify({
           ok: false,
-          error: "Coworker control is disabled."
+          error: "Drew 暂时不可用，请稍后再试。"
         }),
         { status: 503, headers: { "content-type": "application/json" } }
       )
@@ -129,7 +129,7 @@ describe("coworker control client", () => {
       ok: false,
       error: {
         code: "HTTP_ERROR",
-        message: "Coworker control is disabled."
+        message: "Drew 暂时不可用，请稍后再试。"
       }
     });
   });
