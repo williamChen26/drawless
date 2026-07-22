@@ -22,6 +22,8 @@ export type CoworkerResultNoteProps = {
   recordIds?: string[];
   /** 用户请求在画布中定位交付结果。 */
   onLocateResult?: ((recordIds: string[]) => void) | undefined;
+  /** 用户希望基于当前交付继续反馈。 */
+  onRequestChanges?: (() => void) | undefined;
   /** 工作便笺标题。 */
   title?: string;
   /** 展示在边栏的便笺编号。 */
@@ -33,15 +35,15 @@ const phaseCopy: Record<
   { eyebrow: string; liveLabel: string }
 > = {
   speaking: {
-    eyebrow: "正在口述",
+    eyebrow: "正在写给你",
     liveLabel: "Coworker 正在说明工作结果"
   },
   completed: {
-    eyebrow: "交付完成",
+    eyebrow: "交付给你",
     liveLabel: "Coworker 已完成工作"
   },
   interrupted: {
-    eyebrow: "工作中止",
+    eyebrow: "先停在这里",
     liveLabel: "Coworker 已停止本次工作"
   },
   error: {
@@ -61,8 +63,9 @@ export function CoworkerResultNote({
   completionSummary = null,
   recordIds = [],
   onLocateResult,
+  onRequestChanges,
   title = "给你的工作说明",
-  noteNumber = "01"
+  noteNumber
 }: CoworkerResultNoteProps) {
   const copy = phaseCopy[phase];
   const visibleParagraphs = paragraphs.filter(
@@ -90,10 +93,12 @@ export function CoworkerResultNote({
           </p>
           <h2 className={styles.title}>{title}</h2>
         </div>
-        <p aria-label={`工作便笺编号 ${noteNumber}`} className={styles.folio}>
-          <span>工作便笺</span>
-          <strong>{noteNumber.padStart(2, "0")}</strong>
-        </p>
+        {noteNumber ? (
+          <p aria-label={`工作便笺编号 ${noteNumber}`} className={styles.folio}>
+            <span>工作便笺</span>
+            <strong>{noteNumber.padStart(2, "0")}</strong>
+          </p>
+        ) : null}
       </header>
 
       <div
@@ -130,20 +135,34 @@ export function CoworkerResultNote({
             <strong>{completionSummary}</strong>
             {locatableRecordIds.length > 0 ? (
               <small>
-                已登记 {locatableRecordIds.length} 个画布位置
+                画布成果已就位
               </small>
             ) : null}
           </div>
-          {canLocate ? (
-            <Button
-              className={styles.locateButton}
-              onClick={() => onLocateResult?.(locatableRecordIds)}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              在画布中查看
-            </Button>
+          {canLocate || onRequestChanges ? (
+            <div className={styles.receiptActions}>
+              {canLocate ? (
+                <Button
+                  className={styles.locateButton}
+                  onClick={() => onLocateResult?.(locatableRecordIds)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  看画布成果
+                </Button>
+              ) : null}
+              {onRequestChanges ? (
+                <Button
+                  onClick={onRequestChanges}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  继续调整
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </footer>
       ) : null}
@@ -153,7 +172,7 @@ export function CoworkerResultNote({
           <span>{phase === "error" ? "需要处理" : "已保留现场"}</span>
           <p>
             {phase === "error"
-              ? "上面的内容已经保留，可以调整任务后再试一次。"
+              ? "上面的内容已经保留，可以补充说明后再试一次。"
               : "已停止继续生成，上面的内容仍可查看。"}
           </p>
         </footer>

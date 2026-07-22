@@ -161,9 +161,14 @@ function locateCanvasResult(editor: Editor | null, recordIds: string[]) {
   }
 
   editor.setSelectedShapes(shapeIds);
-  editor.zoomToSelection({
-    animation: { duration: editor.options.animationMediumMs }
-  });
+  const selectionBounds = editor.getSelectionPageBounds();
+  if (selectionBounds) {
+    // 成果定位最多回到 100%，避免单个小 shape 被放大到占满画布。
+    editor.zoomToBounds(selectionBounds, {
+      targetZoom: 1,
+      animation: { duration: editor.options.animationMediumMs }
+    });
+  }
   editor.timers.setTimeout(() => editor.getContainer().focus(), 100);
 }
 

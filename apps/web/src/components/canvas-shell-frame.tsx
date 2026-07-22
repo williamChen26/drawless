@@ -36,6 +36,9 @@ export function CanvasShellFrame({
   /** coworker 生命周期控制状态和显式动作。 */
   coworker?: CoworkerControlState;
 }) {
+  const showDebugControls =
+    process.env.NEXT_PUBLIC_DRAWLESS_DEBUG_UI === "true";
+
   return (
     <main className="canvas-shell" data-testid="canvas-shell">
       <header className="canvas-shell__bar" aria-label="Canvas workspace">
@@ -68,7 +71,9 @@ export function CanvasShellFrame({
               房间链接
             </a>
           ) : null}
-          {coworker ? <CoworkerControlBar coworker={coworker} /> : null}
+          {coworker && showDebugControls ? (
+            <CoworkerControlBar coworker={coworker} />
+          ) : null}
         </div>
       </header>
       <section className="canvas-shell__workspace" aria-label="Infinite canvas">

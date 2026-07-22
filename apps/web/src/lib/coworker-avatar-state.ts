@@ -44,7 +44,10 @@ export const COWORKER_WORKING_FRAME_INTERVAL_MS = 450;
 export function resolveCoworkerAvatarMode(
   input: ResolveCoworkerAvatarModeInput
 ): CoworkerAvatarMode {
-  if (input.conversationStatus === "streaming") {
+  if (
+    input.conversationStatus === "receiving" ||
+    input.conversationStatus === "streaming"
+  ) {
     return "working";
   }
   if (input.conversationStatus === "awaiting_approval") {
@@ -76,7 +79,7 @@ export function getCoworkerAvatarLabel(mode: CoworkerAvatarMode) {
   if (mode === "listening") {
     return "我在听";
   }
-  return "和 Coworker 对话";
+  return "找 Coworker";
 }
 
 export function getNextWorkingFrame(

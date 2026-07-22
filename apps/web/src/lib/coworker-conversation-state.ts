@@ -18,10 +18,8 @@ export function isConversationBusy(status: CoworkerConversationStatus) {
 export type CoworkerApprovalOperationIdentity = {
   /** 发起审批操作时所在的协同房间 ID。 */
   roomId: string;
-  /** 当前 agent stream 的 run ID。 */
-  runId: string;
-  /** 等待审批的 tool call ID。 */
-  toolCallId: string;
+  /** Server 为本次能力调用生成的公开审批 ID。 */
+  approvalId: string;
 };
 
 export type CoworkerConversationOperationToken = {
@@ -125,9 +123,5 @@ export function createCoworkerConversationOperationCoordinator(
 export function createCoworkerApprovalOperationKey(
   identity: CoworkerApprovalOperationIdentity
 ) {
-  return JSON.stringify([
-    identity.roomId,
-    identity.runId,
-    identity.toolCallId
-  ]);
+  return JSON.stringify([identity.roomId, identity.approvalId]);
 }

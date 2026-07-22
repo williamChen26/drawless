@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import type { DrawlessCanvasViewportContext } from "@drawless/shared";
 
 import { resolveCoworkerAvatarMode } from "@/lib/coworker-avatar-state";
@@ -8,13 +8,24 @@ import { getLatestCanvasEditResult } from "@/lib/coworker-presence-content";
 import { resolveCoworkerPresenceView } from "@/lib/coworker-presence-state";
 import { useCoworkerAvatarFrame } from "@/lib/use-coworker-avatar-frame";
 import { useCoworkerConversation } from "@/lib/use-coworker-conversation";
+import {
+  createCoworkerWorkspacePresentationKey,
+  reduceCoworkerWorkspaceSurface,
+  resolveCoworkerPrimaryArtifact,
+  resolveCoworkerWorkspaceAttention,
+  type CoworkerComposerPurpose,
+  type CoworkerWorkspaceSurface
+} from "@/lib/coworker-workspace-view";
 
 import { CoworkerActivityLog } from "./coworker-activity-log";
+import { COWORKER_COMPOSER_MESSAGE_ID } from "./coworker-composer";
 import type { CoworkerControlState } from "./coworker-control-state";
 import { CoworkerPresenceStage } from "./coworker-presence-stage";
 
-const COWORKER_COMPOSER_ID = "coworker-composer";
+const COWORKER_WORKSPACE_ID = "coworker-workspace";
+const COWORKER_ENTRY_ID = "coworker-entry";
 const COWORKER_ACTIVITY_LOG_ID = "coworker-activity-log";
+const INITIAL_WORKSPACE_SURFACE: CoworkerWorkspaceSurface = { kind: "closed" };
 
 /**
  * 在场式 Coworker 的编排边界。业务 controller 永远挂载，收起任何 UI 都不会停止任务。
@@ -34,26 +45,31 @@ export function CoworkerConversationWindow({
   /** 在 tldraw 中定位工具真实返回的 record IDs。 */
   onLocateResult?: ((recordIds: string[]) => void) | undefined;
 }) {
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [activityLogOpen, setActivityLogOpen] = useState(false);
+  const [surface, dispatchSurface] = useReducer(
+    reduceCoworkerWorkspaceSurface,
+    INITIAL_WORKSPACE_SURFACE
+  );
   const [entryHovered, setEntryHovered] = useState(false);
   const [entryFocused, setEntryFocused] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+  const [acknowledgedPresentationKey, setAcknowledgedPresentationKey] =
+    useState<string | null>(null);
   const [handoff, setHandoff] = useState<{
     id: number;
     text: string;
   } | null>(null);
   const handoffSequenceRef = useRef(0);
   const handoffTimerRef = useRef<number | null>(null);
+  const lastAutoOpenedPresentationKeyRef = useRef<string | null>(null);
   const conversation = useCoworkerConversation({ roomId, getCanvasViewport });
   const presence = resolveCoworkerPresenceView({
     status: conversation.status,
     turns: conversation.turns,
-    inputFocused: composerOpen && inputFocused
+    inputFocused: surface.kind === "composer" && inputFocused
   });
   const avatarMode = resolveCoworkerAvatarMode({
     conversationStatus: conversation.status,
-    inputFocused: composerOpen && inputFocused,
+    inputFocused: surface.kind === "composer" && inputFocused,
     entryEngaged: entryHovered || entryFocused
   });
   const { frameSrc } = useCoworkerAvatarFrame(avatarMode);
@@ -72,15 +88,72 @@ export function CoworkerConversationWindow({
     coworker.view.state === "disabled" || coworker.view.state === "error"
       ? coworker.view.detail
       : null;
+  const presentationKey = createCoworkerWorkspacePresentationKey({
+    phase: presence.phase,
+    turnId: presence.activeTurn?.id ?? null,
+    approvalId: pendingApproval?.approval.id ?? null,
+    hasText: Boolean(presence.latestText),
+    hasCanvasResult: Boolean(result)
+  });
+  const attention = resolveCoworkerWorkspaceAttention({
+    phase: presence.phase,
+    hasPendingApproval: Boolean(pendingApproval),
+    hasText: Boolean(presence.latestText),
+    hasCanvasResult: Boolean(result),
+    acknowledged:
+      presentationKey === null ||
+      acknowledgedPresentationKey === presentationKey
+  });
+  const currentArtifact = resolveCoworkerPrimaryArtifact({
+    phase: presence.phase,
+    hasHandoff: Boolean(handoff),
+    hasPendingApproval: Boolean(pendingApproval),
+    hasText: Boolean(presence.latestText),
+    hasCanvasResult: Boolean(result),
+    surface: { kind: "current" }
+  });
 
-  const toggleComposer = () => {
-    if (composerOpen) {
-      setInputFocused(false);
+  const acknowledgeCurrentPresentation = () => {
+    if (presentationKey) {
+      setAcknowledgedPresentationKey(presentationKey);
     }
-    setComposerOpen((current) => !current);
+  };
+
+  const openComposer = (purpose: CoworkerComposerPurpose = "open") => {
+    acknowledgeCurrentPresentation();
+    dispatchSurface({ type: "open-composer", purpose });
+    window.requestAnimationFrame(() => {
+      document.getElementById(COWORKER_COMPOSER_MESSAGE_ID)?.focus();
+    });
+  };
+
+  const closeSurface = () => {
+    acknowledgeCurrentPresentation();
+    setInputFocused(false);
+    dispatchSurface({ type: "close" });
+    window.requestAnimationFrame(() => {
+      document.getElementById(COWORKER_ENTRY_ID)?.focus();
+    });
+  };
+
+  const toggleWorkspace = () => {
+    if (surface.kind !== "closed") {
+      closeSurface();
+      return;
+    }
+    if (currentArtifact.kind === "none") {
+      openComposer();
+      return;
+    }
+    dispatchSurface({ type: "show-current" });
   };
 
   useEffect(() => {
+    setInputFocused(false);
+    setAcknowledgedPresentationKey(null);
+    lastAutoOpenedPresentationKeyRef.current = null;
+    dispatchSurface({ type: "close" });
+
     return () => {
       if (handoffTimerRef.current !== null) {
         window.clearTimeout(handoffTimerRef.current);
@@ -88,9 +161,52 @@ export function CoworkerConversationWindow({
     };
   }, [roomId]);
 
+  useEffect(() => {
+    if (surface.kind === "closed") {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeSurface();
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [presentationKey, surface.kind]);
+
+  useEffect(() => {
+    if (
+      !presentationKey ||
+      lastAutoOpenedPresentationKeyRef.current === presentationKey
+    ) {
+      return;
+    }
+
+    if (surface.kind === "composer" && presentationKey.startsWith("reply:")) {
+      // 调整方案时保留用户正在输入的 composer，不让旧回应重新抢占表面。
+      lastAutoOpenedPresentationKeyRef.current = presentationKey;
+      return;
+    }
+
+    lastAutoOpenedPresentationKeyRef.current = presentationKey;
+    setAcknowledgedPresentationKey(null);
+    dispatchSurface({ type: "show-current" });
+  }, [presentationKey, surface.kind]);
+
+  useEffect(() => {
+    if (!pendingApproval || surface.kind !== "activity") {
+      return;
+    }
+
+    // 审批是需要用户立即判断的工作节点，优先于回看协作往来。
+    dispatchSurface({ type: "show-current" });
+  }, [pendingApproval, surface.kind]);
+
   const join = () => {
     void coworker.start({
-      sendIntroCursorChat: true,
+      // 新的在场入口已经承担入场引导，避免旧 cursor chat 与沟通面板重叠。
+      sendIntroCursorChat: false,
       timeoutMs: 10_000,
       waitUntilLoaded: true
     });
@@ -99,7 +215,7 @@ export function CoworkerConversationWindow({
   const sendMessage = () => {
     const submittedMessage = conversation.message.trim();
     const shouldAnimateHandoff = Boolean(submittedMessage) && !conversation.busy;
-    // 请求立即开始；Composer 同步收起，让输入在视觉上真正交接给 Coworker。
+    // 请求立即开始；Composer 让位给当前工作物件，让交接和执行状态保持在同一处。
     const request = conversation.sendMessage();
     if (shouldAnimateHandoff) {
       handoffSequenceRef.current += 1;
@@ -116,27 +232,37 @@ export function CoworkerConversationWindow({
       }, 920);
     }
     setInputFocused(false);
-    setComposerOpen(false);
+    dispatchSurface({ type: "show-current" });
     return request;
   };
 
   const closeActivityLog = () => {
-    setActivityLogOpen(false);
+    acknowledgeCurrentPresentation();
+    dispatchSurface({ type: "close" });
     window.requestAnimationFrame(() => {
       document.getElementById(`${COWORKER_ACTIVITY_LOG_ID}-trigger`)?.focus();
     });
   };
 
+  const locateResult = (recordIds: string[]) => {
+    acknowledgeCurrentPresentation();
+    setInputFocused(false);
+    dispatchSurface({ type: "close" });
+    onLocateResult?.(recordIds);
+  };
+
   return (
     <div
       className="coworker-conversation-surface coworker-presence-surface"
-      data-expanded={composerOpen || activityLogOpen}
+      data-expanded={surface.kind !== "closed"}
       data-mode={avatarMode}
       data-phase={presence.phase}
     >
       <CoworkerPresenceStage
         activityLogId={COWORKER_ACTIVITY_LOG_ID}
-        activityLogOpen={activityLogOpen}
+        attentionLabel={
+          attention.kind === "none" ? null : attention.label
+        }
         avatarMode={avatarMode}
         canCancel={
           conversation.status === "receiving" ||
@@ -147,8 +273,7 @@ export function CoworkerConversationWindow({
             ? result?.summary ?? null
             : null
         }
-        composerId={COWORKER_COMPOSER_ID}
-        composerOpen={composerOpen}
+        entryId={COWORKER_ENTRY_ID}
         frameSrc={frameSrc}
         handoff={handoff}
         joinError={joinError}
@@ -160,23 +285,45 @@ export function CoworkerConversationWindow({
         onAvatarFocusChange={setEntryFocused}
         onAvatarHoverChange={setEntryHovered}
         onCancel={conversation.cancel}
+        onCloseSurface={closeSurface}
         onComposerFocusChange={setInputFocused}
         onJoin={join}
-        onLocateResult={onLocateResult}
+        onLocateResult={onLocateResult ? locateResult : undefined}
         onMessageChange={conversation.setMessage}
+        onOpenComposer={() => openComposer()}
+        onRequestApprovalAdjustment={async ({ turn, approval }) => {
+          const planReleased = await conversation.resolveToolApproval(
+            turn,
+            approval,
+            "decline"
+          );
+          if (planReleased) {
+            openComposer("plan-adjustment");
+          }
+        }}
+        onRequestDeliveryFeedback={() => openComposer("delivery-feedback")}
         onResolveApproval={conversation.resolveToolApproval}
         onSend={sendMessage}
-        onToggleActivityLog={() => setActivityLogOpen((current) => !current)}
-        onToggleComposer={toggleComposer}
+        onShowActivity={() => {
+          acknowledgeCurrentPresentation();
+          dispatchSurface({ type: "show-activity" });
+        }}
+        onShowDelivery={() => {
+          acknowledgeCurrentPresentation();
+          dispatchSurface({ type: "show-delivery" });
+        }}
+        onToggleWorkspace={toggleWorkspace}
         online={online}
         pendingApproval={pendingApproval}
         phase={presence.phase}
         resultRecordIds={result?.recordIds ?? []}
         sendDisabled={conversation.busy}
         statusText={presence.statusText}
+        surface={surface}
+        workspaceId={COWORKER_WORKSPACE_ID}
       />
 
-      {activityLogOpen ? (
+      {surface.kind === "activity" ? (
         <CoworkerActivityLog
           id={COWORKER_ACTIVITY_LOG_ID}
           onClose={closeActivityLog}

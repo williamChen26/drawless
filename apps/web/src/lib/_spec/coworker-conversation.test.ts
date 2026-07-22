@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createCoworkerApprovalResolutionStream,
   createCoworkerConversationStream,
-  createCoworkerConversationToolApprovalStream,
+  loadCoworkerPendingApprovals,
   readCoworkerConversationEventStream
 } from "../coworker-conversation";
 
@@ -104,10 +105,9 @@ describe("coworker conversation stream client", () => {
       })
     );
 
-    const result = await createCoworkerConversationToolApprovalStream({
+    const result = await createCoworkerApprovalResolutionStream({
       roomId: "alpha",
-      runId: "run-1",
-      toolCallId: "call-1",
+      approvalId: "11111111-1111-4111-8111-111111111111",
       decision: "approve",
       serverUrl: "http://127.0.0.1:3001",
       fetcher
@@ -115,11 +115,65 @@ describe("coworker conversation stream client", () => {
 
     expect(result.ok).toBe(true);
     expect(fetcher).toHaveBeenCalledWith(
-      "http://127.0.0.1:3001/rooms/alpha/coworker/conversation/run-1/tool-calls/call-1/approve",
+      "http://127.0.0.1:3001/rooms/alpha/coworker/approvals/11111111-1111-4111-8111-111111111111/resolve",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ runId: "run-1", toolCallId: "call-1" })
+        body: JSON.stringify({ decision: "approve" })
       })
+    );
+  });
+
+  it("loads public pending approvals for room recovery", async () => {
+    const approval = {
+      id: "11111111-1111-4111-8111-111111111111",
+      roomId: "alpha",
+      capability: "canvas.edit",
+      risk: "write",
+      proposal: { intent: "整理画布" },
+      requestedAt: "2026-07-21T06:00:00.000Z"
+    };
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          roomId: "alpha",
+          approvals: [
+            {
+              approval,
+              status: "pending",
+              decision: null,
+              updatedAt: "2026-07-21T06:00:00.000Z",
+              resolvedAt: null,
+              audit: [
+                {
+                  kind: "requested",
+                  occurredAt: "2026-07-21T06:00:00.000Z",
+                  decision: null,
+                  message: null
+                }
+              ]
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      )
+    );
+
+    const result = await loadCoworkerPendingApprovals({
+      roomId: "alpha",
+      serverUrl: "http://127.0.0.1:3001",
+      fetcher
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      approvals: [{ approval: { id: approval.id }, status: "pending" }]
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://127.0.0.1:3001/rooms/alpha/coworker/approvals?status=pending",
+      { method: "GET" }
     );
   });
 
@@ -129,7 +183,7 @@ describe("coworker conversation stream client", () => {
       from: "AGENT",
       payload: {
         toolName: "collect-canvas-context",
-        toolCallId: "call-1"
+        operationId: "11111111-1111-4111-8111-111111111111"
       }
     };
     const stream = new ReadableStream<Uint8Array>({

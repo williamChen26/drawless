@@ -1241,13 +1241,29 @@ function createResultSummary(input: {
   updatedRecordIds: string[];
   warnings: string[];
 }) {
-  const created = input.createdRecordIds.length;
-  const updated = input.updatedRecordIds.length;
-  if (created === 0 && updated === 0) {
+  const createdShapeCount = countShapeRecords(input.createdRecordIds);
+  const updatedShapeCount = countShapeRecords(input.updatedRecordIds);
+  if (
+    input.createdRecordIds.length === 0 &&
+    input.updatedRecordIds.length === 0
+  ) {
     return input.warnings.length > 0
-      ? `coworker 没有写入画布；${input.warnings[0]}`
-      : 'coworker 没有写入画布。';
+      ? `没有修改画布；${input.warnings[0]}`
+      : '没有修改画布。';
   }
 
-  return `coworker 已按“${input.request.intent}”写入画布：新建 ${created} 个 record，更新 ${updated} 个 record。`;
+  const visibleChanges = [
+    createdShapeCount > 0 ? `新增 ${createdShapeCount} 个画布元素` : null,
+    updatedShapeCount > 0 ? `调整 ${updatedShapeCount} 个画布元素` : null,
+  ].filter((value): value is string => Boolean(value));
+  const changeSummary =
+    visibleChanges.length > 0 ? visibleChanges.join('，') : '画布内容已经更新';
+
+  return `已按“${input.request.intent}”完成画布修改：${changeSummary}。`;
+}
+
+function countShapeRecords(recordIds: string[]) {
+  return new Set(
+    recordIds.filter((recordId) => recordId.startsWith('shape:'))
+  ).size;
 }

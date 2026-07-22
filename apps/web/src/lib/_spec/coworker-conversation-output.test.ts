@@ -6,11 +6,10 @@ describe("coworker conversation output processor", () => {
   it("keeps tool events as complete raw chunks", () => {
     const event = {
       type: "tool-call",
-      runId: "run-1",
       from: "AGENT",
       payload: {
         toolName: "collect-canvas-context",
-        toolCallId: "call-1",
+        operationId: "11111111-1111-4111-8111-111111111111",
         args: { roomId: "alpha" }
       }
     };
@@ -21,7 +20,6 @@ describe("coworker conversation output processor", () => {
         type: "tool-call",
         label: "工具调用",
         detail: "collect-canvas-context",
-        runId: "run-1",
         approval: null,
         raw: event
       },
@@ -84,7 +82,6 @@ describe("coworker conversation output processor", () => {
         type: "error",
         label: "流式错误",
         detail: "stream failed",
-        runId: null,
         approval: null,
         raw: event
       },
@@ -95,10 +92,22 @@ describe("coworker conversation output processor", () => {
   it("summarizes tool approval chunks with the pending tool call", () => {
     const event = {
       type: "tool-call-approval",
-      runId: "run-1",
+      operationId: "11111111-1111-4111-8111-111111111111",
+      approval: {
+        id: "11111111-1111-4111-8111-111111111111",
+        roomId: "alpha",
+        capability: "canvas.edit",
+        risk: "write",
+        proposal: {
+          roomId: "alpha",
+          intent: "画一个节点",
+          operations: []
+        },
+        requestedAt: "2026-07-21T06:00:00.000Z"
+      },
       payload: {
         toolName: "edit-canvas",
-        toolCallId: "call-1",
+        operationId: "11111111-1111-4111-8111-111111111111",
         args: {
           roomId: "alpha",
           intent: "画一个节点",
@@ -112,14 +121,8 @@ describe("coworker conversation output processor", () => {
       event: {
         type: "tool-call-approval",
         label: "等待确认",
-        detail: "edit-canvas",
-        runId: "run-1",
-        approval: {
-          runId: "run-1",
-          toolCallId: "call-1",
-          toolName: "edit-canvas",
-          args: event.payload.args
-        },
+        detail: "canvas.edit",
+        approval: event.approval,
         raw: event
       },
       raw: event

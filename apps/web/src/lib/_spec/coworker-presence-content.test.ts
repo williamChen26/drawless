@@ -8,11 +8,8 @@ import {
 
 describe("coworker presence content", () => {
   it("summarizes a validated canvas edit plan without guessing", () => {
-    const summary = createCoworkerApprovalSummary({
-      runId: "run-1",
-      toolCallId: "tool-1",
-      toolName: "edit-canvas",
-      args: {
+    const summary = createCoworkerApprovalSummary(
+      createApproval("canvas.edit", {
         roomId: "room-1",
         currentPageId: "page:1",
         intent: "整理登录流程",
@@ -36,8 +33,8 @@ describe("coworker presence content", () => {
             to: { x: 100, y: 100 }
           }
         ]
-      }
-    });
+      })
+    );
 
     expect(summary).toMatchObject({
       title: "我准备修改当前画布",
@@ -52,11 +49,8 @@ describe("coworker presence content", () => {
   });
 
   it("validates streamed JSON string arguments before presenting them", () => {
-    const summary = createCoworkerApprovalSummary({
-      runId: "run-2",
-      toolCallId: "tool-2",
-      toolName: "edit-canvas",
-      args: JSON.stringify({
+    const summary = createCoworkerApprovalSummary(
+      createApproval("canvas.edit", JSON.stringify({
         roomId: "room-1",
         currentPageId: "page:1",
         intent: "连接登录流程",
@@ -68,8 +62,8 @@ describe("coworker presence content", () => {
             to: { x: 120, y: 20 }
           }
         ]
-      })
-    });
+      }))
+    );
 
     expect(summary).toMatchObject({
       intent: "连接登录流程",
@@ -82,14 +76,21 @@ describe("coworker presence content", () => {
 
   it("falls back safely for unknown or invalid tools", () => {
     expect(
-      createCoworkerApprovalSummary({
-        runId: "run-1",
-        toolCallId: "tool-1",
-        toolName: "edit-canvas",
-        args: { intent: "missing contract fields" }
-      })
+      createCoworkerApprovalSummary(
+        createApproval("canvas.edit", { intent: "missing contract fields" })
+      )
     ).toMatchObject({
       title: "这个画布计划还不能执行",
+      structured: false,
+      canApprove: false
+    });
+
+    expect(
+      createCoworkerApprovalSummary(
+        createApproval("tool.unknown-tool", { action: "unknown" })
+      )
+    ).toMatchObject({
+      title: "这份计划暂时不能执行",
       structured: false,
       canApprove: false
     });
@@ -119,3 +120,14 @@ describe("coworker presence content", () => {
     expect(getLatestSemanticSegment("x".repeat(140))).toHaveLength(120);
   });
 });
+
+function createApproval(capability: string, proposal: unknown) {
+  return {
+    id: "11111111-1111-4111-8111-111111111111",
+    roomId: "room-1",
+    capability,
+    risk: "write" as const,
+    proposal,
+    requestedAt: "2026-07-21T06:00:00.000Z"
+  };
+}

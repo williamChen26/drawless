@@ -42,10 +42,12 @@ describe("resolveCoworkerPresenceView", () => {
 
     expect(view.phase).toBe("awaiting-approval");
     expect(view.pendingApproval).toEqual({
-      runId: "run-1",
-      toolCallId: "call-1",
-      toolName: "update-canvas",
-      args: { shapeIds: ["shape-1"] }
+      id: APPROVAL_ID,
+      roomId: "alpha",
+      capability: "canvas.edit",
+      risk: "write",
+      proposal: { shapeIds: ["shape-1"] },
+      requestedAt: "2026-07-21T06:00:00.000Z"
     });
   });
 
@@ -108,7 +110,6 @@ function createTurn(
   return {
     id,
     userText: "帮我整理画布",
-    runId: "run-1",
     status,
     blocks
   };
@@ -132,7 +133,7 @@ function createToolBlock(
   return {
     id: "tool-1",
     kind: "tool",
-    toolCallId: "call-1",
+    operationId: APPROVAL_ID,
     toolName: "update-canvas",
     argsText: '{"shapeIds":["shape-1"]}',
     args: { shapeIds: ["shape-1"] },
@@ -141,12 +142,16 @@ function createToolBlock(
     approval:
       status === "awaiting-approval"
         ? {
-            runId: "run-1",
-            toolCallId: "call-1",
-            toolName: "update-canvas",
-            args: { shapeIds: ["shape-1"] }
+            id: APPROVAL_ID,
+            roomId: "alpha",
+            capability: "canvas.edit",
+            risk: "write",
+            proposal: { shapeIds: ["shape-1"] },
+            requestedAt: "2026-07-21T06:00:00.000Z"
           }
         : null,
     events: []
   };
 }
+
+const APPROVAL_ID = "11111111-1111-4111-8111-111111111111";

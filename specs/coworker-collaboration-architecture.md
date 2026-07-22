@@ -1,5 +1,7 @@
 # Coworker 协同画布接入技术方案
 
+> 产品术语边界：本文中的 `conversation`、`sessionId`、`thread`、`run` 等词只描述传输、鉴权、模型记忆和并发控制。它们不是用户可见的产品模型。产品定位以 [Drawless Coworker 产品定位](./coworker-product-positioning.md) 为准：Coworker 是持续存在的同事，Room 是共同场所，用户不创建或管理 AI session。
+
 ## 1. 背景
 
 drawless 当前已经有一个清晰的协同基础：
@@ -120,6 +122,38 @@ flowchart TB
 ```
 
 ## 4. 职责边界
+
+### 4.0 审批协议边界
+
+审批不是“工作卡”的后端实现。当前采用三层明确分离：
+
+1. `apps/coworker` 产生 Mastra tool call，`runId/toolCallId` 只属于 runtime 控制面。
+2. `apps/server` 在 SSE adapter 中把 runtime 事件转换为公开的 `operationId` 和 `DrawlessCoworkerApprovalRequest`，并用进程内 registry 保存私有映射、房间归属、占用状态和过期时间。
+3. `apps/web` 只使用 `approvalId + capability + proposal` 请求授权，并按 capability 选择展示器；审批单只是该协议的一种 UI 投影。
+
+公开解析接口为 `POST /rooms/:roomId/coworker/approvals/:approvalId/resolve`。Web 不提交也不保存 Mastra `runId/toolCallId`。Server 原子占用审批记录，防止双击或并发重复解析；失败时回滚为可重试，成功后拒绝再次执行。
+
+当前 registry 与 room 一样是进程内、带 TTL 和容量上限的轻量实现。后续需要跨进程恢复或审计时，应替换 registry 存储，而不是把 runtime 标识重新泄漏给 Web。
+
+当前已支持同一 server 进程内的刷新恢复与生命周期审计：
+
+- `GET /rooms/:roomId/coworker/approvals?status=pending` 返回可恢复的公开审批快照；
+- Web 进入 room 时只恢复 pending 能力调用，不伪造用户消息，也不恢复第二份画布状态；
+- registry 记录 requested、resolution-started、resolution-failed 和 resolved 事件；
+- 审计记录只包含公开 approval、决定、时间和受限长度错误，不包含 runtime 私有标识。
+
+这不是跨进程持久化。Server 或 Coworker runtime 重启后，挂起的 Mastra run 本身可能已经不可继续，因此下一阶段必须把“审批存储”和“runtime 可恢复能力”一起设计，不能只把一张审批单写进数据库就宣称可以恢复。
+
+#### 暂缓 TODO：审批一致性与可恢复执行
+
+这一组能力横跨 Web、Server、Coworker runtime 和持久化层，当前先保留为后续专项，不继续扩展本阶段实现：
+
+- 多标签页实时同步同一审批的状态，正确处理其他页面已经允许、拒绝或失效的冲突；
+- 为公开审批解析增加幂等语义和版本约束，明确重复请求、过期快照与并发决定的响应；
+- 设计 runtime 可恢复执行协议，再决定审批与审计记录的持久化方案；不能只持久化 UI 投影，而留下无法恢复的 tool call；
+- 专项设计时需要同时覆盖异常恢复、runtime 重启、Server 重启、跨进程部署和安全清理策略。
+
+在该专项开始前，当前能力边界保持为：同一 Server 与 Coworker runtime 进程生命周期内支持页面刷新恢复，不承诺跨进程或多标签页实时一致性。
 
 ### 4.1 apps/web
 

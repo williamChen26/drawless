@@ -1,4 +1,4 @@
-import type { CoworkerConversationToolApproval } from "./coworker-conversation-output";
+import type { DrawlessCoworkerApprovalRequest } from "@drawless/shared";
 import type { CoworkerConversationStatus } from "./coworker-conversation-state";
 import {
   getCoworkerConversationPendingApproval,
@@ -21,9 +21,7 @@ export type CoworkerPresenceTurn = {
   /** 本地渲染用轮次 ID。 */
   id: string;
   /** 用户在这一轮发送的原始文本。 */
-  userText: string;
-  /** 当前 Mastra run ID。 */
-  runId: string | null;
+  userText: string | null;
   /** 当前轮次的请求生命周期状态。 */
   status: CoworkerConversationStatus;
   /** 当前轮次按到达顺序形成的内容块。 */
@@ -40,7 +38,7 @@ export type CoworkerPresenceView = {
   /** 当前轮次按事件顺序合并后的完整正文；没有正文时为 null。 */
   latestText: string | null;
   /** 当前轮次仍在等待处理的审批；没有时为 null。 */
-  pendingApproval: CoworkerConversationToolApproval | null;
+  pendingApproval: DrawlessCoworkerApprovalRequest | null;
 };
 
 export type ResolveCoworkerPresenceViewInput = {
@@ -86,12 +84,12 @@ export function getCoworkerPresenceStatusText(phase: CoworkerPresencePhase) {
   const labels: Record<CoworkerPresencePhase, string> = {
     ready: "随时可以开始",
     listening: "我在听",
-    receiving: "收到你的想法",
+    receiving: "已经接住，先让我看看",
     thinking: "正在理解和思考",
     executing: "正在处理画布",
     speaking: "正在向你说明",
     "awaiting-approval": "等你确认",
-    completed: "回复完成",
+    completed: "刚刚回应了你",
     interrupted: "我已经停下来了",
     error: "这次没有顺利完成"
   };
@@ -103,7 +101,7 @@ function resolveCoworkerPresencePhase(input: {
   status: CoworkerConversationStatus;
   activeTurn: CoworkerPresenceTurn | null;
   latestText: string | null;
-  pendingApproval: CoworkerConversationToolApproval | null;
+  pendingApproval: DrawlessCoworkerApprovalRequest | null;
   inputFocused: boolean;
 }): CoworkerPresencePhase {
   if (input.status === "error" || input.activeTurn?.status === "error") {

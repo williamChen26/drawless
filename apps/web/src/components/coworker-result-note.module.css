@@ -279,6 +279,13 @@
   line-height: 1.4;
 }
 
+.receiptActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .locateButton {
   flex: 0 0 auto;
   min-height: 2.25rem;
@@ -357,12 +364,6 @@
   .locateButton {
     align-self: stretch;
     min-height: 2.75rem;
-  }
-}
-
-@media (max-width: 679px) {
-  .note {
-    max-height: min(34rem, calc(100dvh - 300px));
   }
 }
 

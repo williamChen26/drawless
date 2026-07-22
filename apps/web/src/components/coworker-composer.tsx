@@ -9,13 +9,21 @@ import React, {
 import { Button, Textarea } from "@drawless/ui";
 
 const COMPOSER_HINT_ID = "coworker-composer-hint";
-const COMPOSER_MESSAGE_ID = "coworker-composer-message";
+export const COWORKER_COMPOSER_MESSAGE_ID = "coworker-composer-message";
 
 export type CoworkerComposerProps = {
   /** 当前尚未发送的用户草稿。 */
   message: string;
   /** 当前任务进行中时只阻止再次发送，仍允许用户准备下一条草稿。 */
   sendDisabled: boolean;
+  /** Coworker 忙碌时对当前发送限制的准确说明。 */
+  busyHint?: string;
+  /** 当前沟通语境下的输入标签。 */
+  label?: string;
+  /** 当前沟通语境下的输入提示。 */
+  placeholder?: string;
+  /** 当前沟通语境下的提交动作。 */
+  sendLabel?: string;
   /** 更新用户草稿。 */
   onMessageChange: (message: string) => void;
   /** 提交当前草稿。 */
@@ -30,6 +38,10 @@ export type CoworkerComposerProps = {
 export function CoworkerComposer({
   message,
   sendDisabled,
+  busyHint = "Coworker 正在处理。你可以先写下来，当前步骤结束后再递给他。",
+  label = "写给 Coworker",
+  placeholder = "聊聊你的想法，或者把要做的事交代给我",
+  sendLabel = "递给他",
   onMessageChange,
   onSend,
   onFocusChange
@@ -71,19 +83,22 @@ export function CoworkerComposer({
 
   return (
     <form
-      aria-label="把想法交给 Coworker"
+      aria-label={label}
       className="coworker-composer"
       onSubmit={submit}
     >
-      <label className="coworker-composer__label" htmlFor={COMPOSER_MESSAGE_ID}>
-        你想一起完成什么？
+      <label
+        className="coworker-composer__label"
+        htmlFor={COWORKER_COMPOSER_MESSAGE_ID}
+      >
+        {label}
       </label>
       <div className="coworker-composer__surface">
         <Textarea
           aria-describedby={COMPOSER_HINT_ID}
           autoFocus
           className="coworker-composer__input"
-          id={COMPOSER_MESSAGE_ID}
+          id={COWORKER_COMPOSER_MESSAGE_ID}
           maxLength={8_000}
           onBlur={() => onFocusChange(false)}
           onChange={(event) => onMessageChange(event.target.value)}
@@ -91,23 +106,23 @@ export function CoworkerComposer({
           onCompositionStart={handleCompositionStart}
           onFocus={() => onFocusChange(true)}
           onKeyDown={handleKeyDown}
-          placeholder="告诉我你想理解、整理或修改什么"
+          placeholder={placeholder}
           rows={2}
           value={message}
         />
         <Button
-          aria-label={sendDisabled ? "Coworker 正在处理当前任务" : "发送给 Coworker"}
+          aria-label={sendDisabled ? "Coworker 正在处理当前工作" : sendLabel}
           className="coworker-composer__send"
           disabled={!canSend}
           type="submit"
         >
-          交给他
+          {sendLabel}
         </Button>
       </div>
       <p className="coworker-composer__hint" id={COMPOSER_HINT_ID}>
         {sendDisabled
-          ? "可以继续写下一个想法，当前任务完成后再发送。"
-          : "Enter 发送，Shift + Enter 换行"}
+          ? busyHint
+          : "Enter 递出，Shift + Enter 换行"}
       </p>
     </form>
   );

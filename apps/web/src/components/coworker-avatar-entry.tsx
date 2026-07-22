@@ -13,15 +13,19 @@ type CoworkerAvatarEntryProps = {
   mode: CoworkerAvatarMode;
   /** 当前人物静态帧地址。 */
   frameSrc: string;
-  /** 会话面板当前是否展开。 */
+  /** Coworker 协作空间当前是否展开。 */
   expanded: boolean;
-  /** 会话面板 DOM ID。 */
+  /** Coworker 协作空间 DOM ID。 */
   panelId: string;
+  /** 人物入口 DOM ID，用于收起后恢复键盘焦点。 */
+  entryId?: string;
   /** coworker 当前生命周期状态。 */
   lifecycleState: string;
-  /** 当前主舞台要求用户先完成审批时，暂时锁定 Composer 入口。 */
-  disabled?: boolean;
-  /** 切换会话面板展开状态。 */
+  /** 协作空间收起后仍需提醒用户的工作事实。 */
+  attentionLabel?: string | null;
+  /** 用户纸带是否正在进入人物接收区。 */
+  receivingHandoff?: boolean;
+  /** 打开或收起 Coworker 协作空间。 */
   onToggle: () => void;
   /** 更新鼠标 hover 状态。 */
   onHoverChange: (hovered: boolean) => void;
@@ -34,23 +38,29 @@ export function CoworkerAvatarEntry({
   frameSrc,
   expanded,
   panelId,
+  entryId,
   lifecycleState,
-  disabled = false,
+  attentionLabel = null,
+  receivingHandoff = false,
   onToggle,
   onHoverChange,
   onFocusChange
 }: CoworkerAvatarEntryProps) {
   const [assetFailed, setAssetFailed] = useState(false);
-  const accessibleLabel = disabled
-    ? "请先处理 Coworker 的确认单"
-    : expanded
-      ? "收起 Coworker 输入区"
-      : "和 Coworker 一起工作";
+  const accessibleLabel = expanded
+    ? "收起 Coworker 协作空间"
+    : attentionLabel
+      ? `找 Coworker，${attentionLabel}`
+      : "找 Coworker";
+  const visibleLabel =
+    !expanded && attentionLabel
+      ? attentionLabel
+      : getCoworkerAvatarLabel(mode);
   const commonProps = {
     "aria-controls": panelId,
     "aria-expanded": expanded,
     "aria-label": accessibleLabel,
-    disabled,
+    id: entryId,
     onBlur: () => onFocusChange(false),
     onClick: onToggle,
     onFocus: () => onFocusChange(true),
@@ -75,6 +85,7 @@ export function CoworkerAvatarEntry({
     <button
       {...commonProps}
       className="coworker-avatar"
+      data-handoff={receivingHandoff}
       data-lifecycle={lifecycleState}
       data-mode={mode}
     >
@@ -90,7 +101,7 @@ export function CoworkerAvatarEntry({
         />
       </span>
       <span className="coworker-avatar__label" aria-hidden="true">
-        {getCoworkerAvatarLabel(mode)}
+        {visibleLabel}
       </span>
     </button>
   );

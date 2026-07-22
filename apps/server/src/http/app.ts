@@ -4,11 +4,14 @@ import { Readable } from "node:stream";
 import type {
   DrawlessHealthResponse,
   DrawlessReadyResponse,
+  DrawlessRoomId,
   DrawlessServerConfig,
   DrawlessStorageSummary
 } from "@drawless/shared";
 import {
-  coworkerConversationToolApprovalRequestSchema,
+  coworkerApprovalIdSchema,
+  coworkerApprovalListQuerySchema,
+  coworkerApprovalResolutionRequestSchema,
   coworkerConversationStreamRequestSchema,
   parseDrawlessRoomId,
   serverCoworkerStartRequestSchema
@@ -21,6 +24,12 @@ import {
   type CoworkerControlClient
 } from "../coworker/coworker-control-client.js";
 import {
+  createCoworkerApprovalRegistry,
+  type CoworkerApprovalLease,
+  type CoworkerApprovalRegistry
+} from "../coworker/coworker-approval-registry.js";
+import { createCoworkerPublicEventStream } from "../coworker/coworker-public-stream.js";
+import {
   createRoomRegistry,
   type RoomRegistry
 } from "../sync/room-registry.js";
@@ -30,6 +39,7 @@ export type CreateServerAppOptions = {
   config: DrawlessServerConfig;
   registry?: RoomRegistry;
   coworkerClient?: CoworkerControlClient;
+  coworkerApprovalRegistry?: CoworkerApprovalRegistry;
   logger?: boolean;
 };
 
@@ -50,10 +60,13 @@ type CoworkerRouteParams = {
   roomId: string;
 };
 
-type CoworkerConversationToolApprovalRouteParams = {
+type CoworkerApprovalRouteParams = {
   roomId: string;
-  runId: string;
-  toolCallId: string;
+  approvalId: string;
+};
+
+type CoworkerApprovalListRouteQuery = {
+  status?: string;
 };
 
 const storageSummary: DrawlessStorageSummary = {
@@ -70,6 +83,7 @@ export async function createServerApp({
   config,
   registry = createRoomRegistry(),
   coworkerClient,
+  coworkerApprovalRegistry = createCoworkerApprovalRegistry(),
   logger = false
 }: CreateServerAppOptions): Promise<ServerApp> {
   const app = Fastify({ logger });
@@ -200,30 +214,74 @@ export async function createServerApp({
           roomId.value,
           body.data
         );
-        return sendCoworkerStreamResponse(reply, response);
+        return sendCoworkerStreamResponse(reply, response, {
+          roomId: roomId.value,
+          approvalRegistry: coworkerApprovalRegistry
+        });
       } catch (error) {
         return sendCoworkerControlError(reply, error);
       }
     }
   );
 
-  app.post<{ Params: CoworkerConversationToolApprovalRouteParams }>(
-    "/rooms/:roomId/coworker/conversation/:runId/tool-calls/:toolCallId/approve",
+  app.get<{
+    Params: CoworkerRouteParams;
+    Querystring: CoworkerApprovalListRouteQuery;
+  }>(
+    "/rooms/:roomId/coworker/approvals",
     async (request, reply) => {
       const roomId = parseRoomIdForHttp(request.params.roomId);
       if (!roomId.ok) {
         return reply.code(400).send({ ok: false, error: roomId.error });
       }
 
-      const body = coworkerConversationToolApprovalRequestSchema.safeParse({
-        runId: request.params.runId,
-        toolCallId: request.params.toolCallId
-      });
-      if (!body.success) {
+      const query = coworkerApprovalListQuerySchema.safeParse(request.query);
+      if (!query.success) {
         return reply.code(400).send({
           ok: false,
           error:
-            body.error.issues[0]?.message ??
+            query.error.issues[0]?.message ??
+            "Invalid coworker approval list request."
+        });
+      }
+
+      return {
+        roomId: roomId.value,
+        approvals: coworkerApprovalRegistry.list(
+          roomId.value,
+          query.data.status
+        )
+      };
+    }
+  );
+
+  app.post<{ Params: CoworkerApprovalRouteParams }>(
+    "/rooms/:roomId/coworker/approvals/:approvalId/resolve",
+    async (request, reply) => {
+      const roomId = parseRoomIdForHttp(request.params.roomId);
+      if (!roomId.ok) {
+        return reply.code(400).send({ ok: false, error: roomId.error });
+      }
+
+      const approvalId = coworkerApprovalIdSchema.safeParse(
+        request.params.approvalId
+      );
+      if (!approvalId.success) {
+        return reply.code(400).send({
+          ok: false,
+          error:
+            approvalId.error.issues[0]?.message ??
+            "Invalid coworker conversation approval request."
+        });
+      }
+      const resolution = coworkerApprovalResolutionRequestSchema.safeParse(
+        request.body ?? {}
+      );
+      if (!resolution.success) {
+        return reply.code(400).send({
+          ok: false,
+          error:
+            resolution.error.issues[0]?.message ??
             "Invalid coworker conversation approval request."
         });
       }
@@ -235,53 +293,53 @@ export async function createServerApp({
         });
       }
 
-      try {
-        const response = await resolvedCoworkerClient.approveConversationToolCall(
-          roomId.value,
-          body.data
-        );
-        return sendCoworkerStreamResponse(reply, response);
-      } catch (error) {
-        return sendCoworkerControlError(reply, error);
-      }
-    }
-  );
-
-  app.post<{ Params: CoworkerConversationToolApprovalRouteParams }>(
-    "/rooms/:roomId/coworker/conversation/:runId/tool-calls/:toolCallId/decline",
-    async (request, reply) => {
-      const roomId = parseRoomIdForHttp(request.params.roomId);
-      if (!roomId.ok) {
-        return reply.code(400).send({ ok: false, error: roomId.error });
-      }
-
-      const body = coworkerConversationToolApprovalRequestSchema.safeParse({
-        runId: request.params.runId,
-        toolCallId: request.params.toolCallId
-      });
-      if (!body.success) {
-        return reply.code(400).send({
+      const acquired = coworkerApprovalRegistry.acquire(
+        roomId.value,
+        approvalId.data,
+        resolution.data.decision
+      );
+      if (!acquired.ok) {
+        const statusCode =
+          acquired.reason === "not-found" || acquired.reason === "room-mismatch"
+            ? 404
+            : 409;
+        return reply.code(statusCode).send({
           ok: false,
           error:
-            body.error.issues[0]?.message ??
-            "Invalid coworker conversation approval request."
-        });
-      }
-
-      if (!config.coworker.enabled || !resolvedCoworkerClient) {
-        return reply.code(503).send({
-          ok: false,
-          error: "Coworker control is disabled."
+            acquired.reason === "resolved"
+              ? "Coworker approval was already resolved."
+              : acquired.reason === "resolving"
+                ? "Coworker approval is already being resolved."
+                : "Coworker approval was not found in this room."
         });
       }
 
       try {
-        const response = await resolvedCoworkerClient.declineConversationToolCall(
-          roomId.value,
-          body.data
-        );
-        return sendCoworkerStreamResponse(reply, response);
+        const runtimeRequest = {
+          runId: acquired.lease.runtime.runId,
+          toolCallId: acquired.lease.runtime.toolCallId
+        };
+        const response =
+          resolution.data.decision === "approve"
+            ? await resolvedCoworkerClient.approveConversationToolCall(
+                roomId.value,
+                runtimeRequest
+              )
+            : await resolvedCoworkerClient.declineConversationToolCall(
+                roomId.value,
+                runtimeRequest
+              );
+        coworkerApprovalRegistry.settle(approvalId.data, { succeeded: true });
+        return sendCoworkerStreamResponse(reply, response, {
+          roomId: roomId.value,
+          approvalRegistry: coworkerApprovalRegistry,
+          resolvedApproval: acquired.lease
+        });
       } catch (error) {
+        coworkerApprovalRegistry.settle(approvalId.data, {
+          succeeded: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
         return sendCoworkerControlError(reply, error);
       }
     }
@@ -378,7 +436,18 @@ async function ensureCoworkerSessionReady(
   }
 }
 
-function sendCoworkerStreamResponse(reply: FastifyReply, response: Response) {
+function sendCoworkerStreamResponse(
+  reply: FastifyReply,
+  response: Response,
+  input: {
+    /** 当前协同房间 ID。 */
+    roomId: DrawlessRoomId;
+    /** Server 进程内的审批注册表。 */
+    approvalRegistry: CoworkerApprovalRegistry;
+    /** 审批续流时已知的 runtime 与公开 ID 映射。 */
+    resolvedApproval?: CoworkerApprovalLease | undefined;
+  }
+) {
   if (!response.body) {
     return reply.code(502).send({
       ok: false,
@@ -391,7 +460,11 @@ function sendCoworkerStreamResponse(reply: FastifyReply, response: Response) {
     response.headers.get("content-type") ?? "text/event-stream; charset=utf-8"
   );
   reply.header("cache-control", "no-cache");
-  return reply.send(Readable.fromWeb(response.body));
+  const publicStream = createCoworkerPublicEventStream({
+    ...input,
+    stream: response.body
+  });
+  return reply.send(Readable.fromWeb(publicStream));
 }
 
 function sendCoworkerControlError(

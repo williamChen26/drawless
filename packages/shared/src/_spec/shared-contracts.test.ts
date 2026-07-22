@@ -7,6 +7,9 @@ import {
   canvasContextSnapshotSchema,
   canvasSemanticGraphSchema,
   canvasSummarySchema,
+  coworkerApprovalListResponseSchema,
+  coworkerApprovalRequestSchema,
+  coworkerApprovalResolutionRequestSchema,
   coworkerConversationToolApprovalRequestSchema,
   coworkerConversationStreamRequestSchema,
   coworkerControlConfigSchema,
@@ -405,6 +408,51 @@ describe("drawless shared contracts", () => {
         toolCallId: "call-1"
       })
     ).toEqual({ runId: "run-1", toolCallId: "call-1" });
+
+    expect(
+      coworkerApprovalRequestSchema.parse({
+        id: "11111111-1111-4111-8111-111111111111",
+        roomId: "alpha",
+        capability: "canvas.edit",
+        risk: "write",
+        proposal: { intent: "整理画布" },
+        requestedAt: "2026-07-21T06:00:00.000Z"
+      })
+    ).toMatchObject({ capability: "canvas.edit", risk: "write" });
+    expect(
+      coworkerApprovalResolutionRequestSchema.parse({ decision: "approve" })
+    ).toEqual({ decision: "approve" });
+    expect(
+      coworkerApprovalListResponseSchema.parse({
+        roomId: "alpha",
+        approvals: [
+          {
+            approval: {
+              id: "11111111-1111-4111-8111-111111111111",
+              roomId: "alpha",
+              capability: "canvas.edit",
+              risk: "write",
+              proposal: { intent: "整理画布" },
+              requestedAt: "2026-07-21T06:00:00.000Z"
+            },
+            status: "pending",
+            decision: null,
+            updatedAt: "2026-07-21T06:00:00.000Z",
+            resolvedAt: null,
+            audit: [
+              {
+                kind: "requested",
+                occurredAt: "2026-07-21T06:00:00.000Z",
+                decision: null,
+                message: null
+              }
+            ]
+          }
+        ]
+      })
+    ).toMatchObject({
+      approvals: [{ status: "pending", audit: [{ kind: "requested" }] }]
+    });
   });
 
 });

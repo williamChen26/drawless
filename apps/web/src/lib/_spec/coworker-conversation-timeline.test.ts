@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createCoworkerConversationOutput } from "../coworker-conversation-output";
 import {
   appendCoworkerConversationOutputBlock,
+  createRecoveredCoworkerApprovalBlocks,
   getCoworkerConversationPendingApproval,
   setCoworkerConversationToolStatus,
   type CoworkerConversationTimelineBlock
@@ -24,7 +25,7 @@ describe("coworker conversation timeline", () => {
       blocks,
       {
         type: "tool-call-input-streaming-start",
-        payload: { toolCallId: "call-1", toolName: "collect-canvas-context" }
+        payload: { operationId: APPROVAL_ID, toolName: "collect-canvas-context" }
       },
       createId
     );
@@ -33,7 +34,7 @@ describe("coworker conversation timeline", () => {
       {
         type: "tool-call-delta",
         payload: {
-          toolCallId: "call-1",
+          operationId: APPROVAL_ID,
           toolName: "collect-canvas-context",
           argsTextDelta: "{\"roomId\":"
         }
@@ -45,7 +46,7 @@ describe("coworker conversation timeline", () => {
       {
         type: "tool-call-delta",
         payload: {
-          toolCallId: "call-1",
+          operationId: APPROVAL_ID,
           toolName: "collect-canvas-context",
           argsTextDelta: "\"alpha\"}"
         }
@@ -57,7 +58,7 @@ describe("coworker conversation timeline", () => {
       {
         type: "tool-call",
         payload: {
-          toolCallId: "call-1",
+          operationId: APPROVAL_ID,
           toolName: "collect-canvas-context",
           args: { roomId: "alpha" }
         }
@@ -68,9 +69,10 @@ describe("coworker conversation timeline", () => {
       blocks,
       {
         type: "tool-call-approval",
-        runId: "run-1",
+        operationId: APPROVAL_ID,
+        approval: createApproval(),
         payload: {
-          toolCallId: "call-1",
+          operationId: APPROVAL_ID,
           toolName: "collect-canvas-context",
           args: { roomId: "alpha" }
         }
@@ -86,7 +88,7 @@ describe("coworker conversation timeline", () => {
       },
       {
         kind: "tool",
-        toolCallId: "call-1",
+        operationId: APPROVAL_ID,
         toolName: "collect-canvas-context",
         argsText: "{\"roomId\":\"alpha\"}",
         args: { roomId: "alpha" },
@@ -94,17 +96,14 @@ describe("coworker conversation timeline", () => {
       }
     ]);
     expect(getCoworkerConversationPendingApproval(blocks)).toMatchObject({
-      runId: "run-1",
-      toolCallId: "call-1"
+      id: APPROVAL_ID,
+      capability: "tool.collect-canvas-context"
     });
 
     blocks = setCoworkerConversationToolStatus(
       blocks,
       {
-        runId: "run-1",
-        toolCallId: "call-1",
-        toolName: "collect-canvas-context",
-        args: { roomId: "alpha" }
+        ...createApproval()
       },
       "running"
     );
@@ -113,7 +112,7 @@ describe("coworker conversation timeline", () => {
       {
         type: "tool-result",
         payload: {
-          toolCallId: "call-1",
+          operationId: APPROVAL_ID,
           toolName: "collect-canvas-context",
           result: { available: true }
         }
@@ -162,7 +161,58 @@ describe("coworker conversation timeline", () => {
       }
     ]);
   });
+
+  it("recovers pending approvals without runtime ids or fabricated dialogue", () => {
+    const approval = createApproval();
+    const blocks = createRecoveredCoworkerApprovalBlocks([
+      {
+        approval,
+        status: "pending",
+        decision: null,
+        updatedAt: approval.requestedAt,
+        resolvedAt: null,
+        audit: [
+          {
+            kind: "requested",
+            occurredAt: approval.requestedAt,
+            decision: null,
+            message: null
+          }
+        ]
+      }
+    ]);
+
+    expect(blocks).toEqual([
+      {
+        id: `recovered-approval:${APPROVAL_ID}`,
+        kind: "tool",
+        operationId: APPROVAL_ID,
+        toolName: null,
+        argsText: "",
+        args: { roomId: "alpha" },
+        result: null,
+        status: "awaiting-approval",
+        approval,
+        events: []
+      }
+    ]);
+    expect(JSON.stringify(blocks)).not.toContain("runId");
+    expect(JSON.stringify(blocks)).not.toContain("toolCallId");
+  });
 });
+
+const APPROVAL_ID = "11111111-1111-4111-8111-111111111111";
+
+function createApproval() {
+  return {
+    id: APPROVAL_ID,
+    roomId: "alpha" as const,
+    capability: "tool.collect-canvas-context",
+    risk: "write" as const,
+    proposal: { roomId: "alpha" },
+    requestedAt: "2026-07-21T06:00:00.000Z"
+  };
+}
 
 function appendEvent(
   blocks: CoworkerConversationTimelineBlock[],

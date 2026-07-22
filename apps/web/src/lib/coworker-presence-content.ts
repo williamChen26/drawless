@@ -1,10 +1,10 @@
 import {
   canvasEditRequestSchema,
   canvasEditResultSchema,
-  type DrawlessCanvasEditOperation
+  type DrawlessCanvasEditOperation,
+  type DrawlessCoworkerApprovalRequest
 } from "@drawless/shared";
 
-import type { CoworkerConversationToolApproval } from "./coworker-conversation-output";
 import type { CoworkerConversationTimelineBlock } from "./coworker-conversation-timeline";
 
 export type CoworkerApprovalSummary = {
@@ -39,14 +39,26 @@ export type CoworkerResultSummary = {
  * 审批卡只展示 shared 契约可以证明的信息，避免前端根据任意工具参数猜测风险。
  */
 export function createCoworkerApprovalSummary(
-  approval: CoworkerConversationToolApproval
+  approval: DrawlessCoworkerApprovalRequest
 ): CoworkerApprovalSummary {
-  if (approval.toolName !== "edit-canvas") {
-    return createGenericApprovalSummary(approval.toolName);
-  }
+  const presenter = COWORKER_APPROVAL_PRESENTERS[approval.capability];
+  return presenter
+    ? presenter(approval)
+    : createGenericApprovalSummary(approval.capability);
+}
 
+const COWORKER_APPROVAL_PRESENTERS: Record<
+  string,
+  (approval: DrawlessCoworkerApprovalRequest) => CoworkerApprovalSummary
+> = {
+  "canvas.edit": createCanvasEditApprovalSummary
+};
+
+function createCanvasEditApprovalSummary(
+  approval: DrawlessCoworkerApprovalRequest
+): CoworkerApprovalSummary {
   const result = canvasEditRequestSchema.safeParse(
-    parseStructuredToolArguments(approval.args)
+    parseStructuredToolArguments(approval.proposal)
   );
   if (!result.success) {
     return createInvalidCanvasApprovalSummary();
@@ -114,6 +126,35 @@ export function getConversationPlainText(
 }
 
 /**
+ * 把模型常见的 Markdown 控制语法整理成适合纸面表达的纯文本。
+ */
+export function normalizeCoworkerExpression(text: string) {
+  return text
+    .replace(/^[\t ]*[-_]{3,}[\t ]*$/gmu, "")
+    .replace(/^[\t ]*```[^\n]*$/gmu, "")
+    .replace(/^[\t ]*\|?[\t ]*:?-{3,}:?[\t ]*(?:\|[\t ]*:?-{3,}:?[\t ]*)+\|?[\t ]*$/gmu, "")
+    .replace(/^[\t ]*\|(.+)\|[\t ]*$/gmu, (_line, cells: string) =>
+      cells
+        .split("|")
+        .map((cell) => cell.trim())
+        .filter(Boolean)
+        .join(" · ")
+    )
+    .replace(/^#{1,6}\s+/gmu, "")
+    .replace(/\*\*([^*]+)\*\*/gu, "$1")
+    .replace(/`([^`]+)`/gu, "$1")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+}
+
+export function splitSemanticParagraphs(text: string) {
+  return normalizeCoworkerExpression(text)
+    .split(/\n{2,}/u)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
+/**
  * 对话气泡只展示最后一个语义段，完整正文仍保留在工作记录中。
  */
 export function getLatestSemanticSegment(text: string, maxLength = 120) {
@@ -147,17 +188,19 @@ export function getLatestCanvasEditResult(
 }
 
 function createGenericApprovalSummary(
-  toolName: string | null
+  capability: string
 ): CoworkerApprovalSummary {
   return {
-    title: "我需要你的确认",
-    intent: toolName ? `准备运行 ${toolName}` : "准备继续执行下一步操作",
+    title: "这份计划暂时不能执行",
+    intent: capability !== "unknown"
+      ? `当前界面还不能安全审核 ${capability}。`
+      : "当前计划缺少可以审核的工具信息。",
     operationCount: null,
     operationSummary: null,
-    scope: "当前任务",
+    scope: "未知范围",
     structured: false,
-    canApprove: true,
-    validationMessage: null
+    canApprove: false,
+    validationMessage: "请暂不执行，并让 Coworker 重新整理成可验证的计划。"
   };
 }
 

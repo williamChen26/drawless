@@ -1,3 +1,8 @@
+import {
+  coworkerApprovalRequestSchema,
+  type DrawlessCoworkerApprovalRequest
+} from "@drawless/shared";
+
 export type CoworkerConversationOutput =
   | {
       /** coworker 正文增量输出。 */
@@ -6,7 +11,7 @@ export type CoworkerConversationOutput =
       text: string;
       /** 事件在 conversation UI 中展示的补充状态。 */
       event: CoworkerConversationEventSummary;
-      /** Mastra 原始 stream chunk，web 端 RAW 区直接展示。 */
+      /** Server adapter 输出的公开 stream chunk，web 端 RAW 区直接展示。 */
       raw: unknown;
     }
   | {
@@ -14,7 +19,7 @@ export type CoworkerConversationOutput =
       kind: "tool";
       /** 事件在 conversation UI 中展示的补充状态。 */
       event: CoworkerConversationEventSummary;
-      /** Mastra 原始 tool chunk，包含 tool-call/tool-result 等完整数据。 */
+      /** 公开 tool chunk，包含 operationId、tool 参数和结果等数据。 */
       raw: unknown;
     }
   | {
@@ -22,7 +27,7 @@ export type CoworkerConversationOutput =
       kind: "raw";
       /** 事件在 conversation UI 中展示的补充状态。 */
       event: CoworkerConversationEventSummary;
-      /** Mastra 原始 stream chunk。 */
+      /** Server adapter 输出的公开 stream chunk。 */
       raw: unknown;
     };
 
@@ -33,23 +38,10 @@ export type CoworkerConversationEventSummary = {
   label: string;
   /** 对 label 的补充说明；没有可读信息时为 null。 */
   detail: string | null;
-  /** 当前 Mastra run ID；事件中没有携带时为 null。 */
-  runId: string | null;
-  /** 需要用户确认的 tool call；普通事件为 null。 */
-  approval: CoworkerConversationToolApproval | null;
+  /** 需要用户确认的能力调用；普通事件为 null。 */
+  approval: DrawlessCoworkerApprovalRequest | null;
   /** 原始 stream chunk，便于开发阶段排查。 */
   raw: unknown;
-};
-
-export type CoworkerConversationToolApproval = {
-  /** Mastra 当前 agent stream 的 run ID；事件中没有携带时为 null。 */
-  runId: string | null;
-  /** 等待用户确认或拒绝的 tool call ID。 */
-  toolCallId: string;
-  /** 等待确认的 tool 名称；事件中没有携带时为 null。 */
-  toolName: string | null;
-  /** tool call 的参数，供开发阶段在 RAW 区核对。 */
-  args: unknown;
 };
 
 export function createCoworkerConversationOutput(
@@ -86,14 +78,12 @@ export function createCoworkerConversationEventSummary(
 ): CoworkerConversationEventSummary {
   const type = getStringField(event, "type") ?? "message";
   const toolName = getToolName(event);
-  const runId = getRunId(event);
   if (type === "text-delta") {
     const text = getTextDelta(event);
     return {
       type,
       label: "正文增量",
       detail: text ? `${text.length} 字符` : null,
-      runId,
       approval: null,
       raw: event
     };
@@ -103,8 +93,7 @@ export function createCoworkerConversationEventSummary(
     return {
       type,
       label: "运行开始",
-      detail: runId,
-      runId,
+      detail: null,
       approval: null,
       raw: event
     };
@@ -115,8 +104,7 @@ export function createCoworkerConversationEventSummary(
     return {
       type,
       label: "等待确认",
-      detail: approval?.toolName ?? toolName,
-      runId,
+      detail: approval?.capability ?? toolName,
       approval,
       raw: event
     };
@@ -127,7 +115,6 @@ export function createCoworkerConversationEventSummary(
       type,
       label: formatToolEventLabel(type),
       detail: toolName,
-      runId,
       approval: null,
       raw: event
     };
@@ -138,7 +125,6 @@ export function createCoworkerConversationEventSummary(
       type,
       label: "流式错误",
       detail: getErrorMessage(event),
-      runId,
       approval: null,
       raw: event
     };
@@ -149,7 +135,6 @@ export function createCoworkerConversationEventSummary(
       type,
       label: "回复完成",
       detail: null,
-      runId,
       approval: null,
       raw: event
     };
@@ -159,7 +144,6 @@ export function createCoworkerConversationEventSummary(
     type,
     label: type,
     detail: getStringField(event, "message"),
-    runId,
     approval: null,
     raw: event
   };
@@ -201,11 +185,6 @@ function getStringField(input: unknown, key: string) {
   return typeof value === "string" ? value : null;
 }
 
-function getRunId(event: unknown) {
-  const payload = getObjectField(event, "payload");
-  return getStringField(event, "runId") ?? getStringField(payload, "runId");
-}
-
 function getToolName(event: unknown) {
   const payload = getObjectField(event, "payload");
   return (
@@ -216,27 +195,11 @@ function getToolName(event: unknown) {
   );
 }
 
-function createToolApproval(event: unknown): CoworkerConversationToolApproval | null {
-  const payload = getObjectField(event, "payload");
-  const toolCallId =
-    getStringField(payload, "toolCallId") ??
-    getStringField(event, "toolCallId") ??
-    getStringField(payload, "id") ??
-    getStringField(event, "id");
-  if (!toolCallId) {
-    return null;
-  }
-
-  return {
-    runId: getRunId(event),
-    toolCallId,
-    toolName: getToolName(event),
-    args:
-      getUnknownField(payload, "args") ??
-      getUnknownField(payload, "input") ??
-      getUnknownField(event, "args") ??
-      getUnknownField(event, "input")
-  };
+function createToolApproval(event: unknown) {
+  const result = coworkerApprovalRequestSchema.safeParse(
+    getUnknownField(event, "approval")
+  );
+  return result.success ? result.data : null;
 }
 
 function getErrorMessage(event: unknown) {

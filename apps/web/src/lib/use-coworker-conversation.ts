@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { DrawlessCanvasViewportContext } from "@drawless/shared";
+import type {
+  DrawlessCanvasViewportContext,
+  DrawlessCoworkerApprovalRequest
+} from "@drawless/shared";
 
 import {
   createCoworkerConversationStream,
-  createCoworkerConversationToolApprovalStream,
+  createCoworkerApprovalResolutionStream,
+  loadCoworkerPendingApprovals,
   readCoworkerConversationEventStream,
   type CoworkerConversationStreamError
 } from "./coworker-conversation";
-import {
-  createCoworkerConversationOutput,
-  type CoworkerConversationToolApproval
-} from "./coworker-conversation-output";
+import { createCoworkerConversationOutput } from "./coworker-conversation-output";
 import {
   createCoworkerConversationOperationCoordinator,
   isConversationBusy,
@@ -23,6 +24,7 @@ import {
 import {
   appendCoworkerConversationOutputBlock,
   appendCoworkerConversationTextChunk,
+  createRecoveredCoworkerApprovalBlocks,
   type CoworkerConversationTimelineBlock
 } from "./coworker-conversation-timeline";
 
@@ -30,9 +32,7 @@ export type CoworkerConversationTurn = {
   /** 本地渲染用 ID，不作为跨端消息事实源。 */
   id: string;
   /** 用户在这一轮发送的文本。 */
-  userText: string;
-  /** 当前 Mastra run ID；用于 approval 续流。 */
-  runId: string | null;
+  userText: string | null;
   /** 这一轮回复的请求生命周期状态。 */
   status: CoworkerConversationStatus;
   /** coworker 回复按 SSE 到达顺序形成的串行内容块。 */
@@ -65,6 +65,7 @@ export function useCoworkerConversation(input: {
     typeof createCoworkerConversationOperationCoordinator
   > | null>(null);
   const activeRequestRef = useRef<ActiveConversationRequest | null>(null);
+  const activityEpochRef = useRef(0);
 
   if (!coordinatorRef.current) {
     coordinatorRef.current =
@@ -74,23 +75,61 @@ export function useCoworkerConversation(input: {
   const busy = isConversationBusy(status);
 
   useEffect(() => {
+    const recoveryController = new AbortController();
+    const recoveryEpoch = activityEpochRef.current + 1;
+    activityEpochRef.current = recoveryEpoch;
     coordinator.enterRoom(input.roomId);
     setMessage("");
     setTurns([]);
     setStatus("idle");
 
-    return () => {
-      const activeRequest = activeRequestRef.current;
-      if (!activeRequest || activeRequest.token.roomId !== input.roomId) {
-        return;
-      }
+    void loadCoworkerPendingApprovals({
+      roomId: input.roomId,
+      serverUrl: getCoworkerServerUrl(),
+      signal: recoveryController.signal
+    })
+      .then((result) => {
+        if (
+          recoveryController.signal.aborted ||
+          activityEpochRef.current !== recoveryEpoch ||
+          !result.ok ||
+          result.approvals.length === 0
+        ) {
+          return;
+        }
 
-      activeRequest.abortController.abort();
-      coordinator.finish(activeRequest.token);
-      if (activeRequest.approvalIdentity) {
-        coordinator.releaseApproval(activeRequest.approvalIdentity);
+        const blocks = createRecoveredCoworkerApprovalBlocks(
+          result.approvals
+        );
+        if (blocks.length === 0) {
+          return;
+        }
+        setTurns([
+          {
+            id: `recovered-approvals:${input.roomId}`,
+            userText: null,
+            status: "awaiting_approval",
+            blocks
+          }
+        ]);
+        setStatus("awaiting_approval");
+      })
+      .catch(() => {
+        // 恢复失败不阻断正常沟通；后续显式请求仍会返回可见错误。
+      });
+
+    return () => {
+      recoveryController.abort();
+      activityEpochRef.current += 1;
+      const activeRequest = activeRequestRef.current;
+      if (activeRequest && activeRequest.token.roomId === input.roomId) {
+        activeRequest.abortController.abort();
+        coordinator.finish(activeRequest.token);
+        if (activeRequest.approvalIdentity) {
+          coordinator.releaseApproval(activeRequest.approvalIdentity);
+        }
+        activeRequestRef.current = null;
       }
-      activeRequestRef.current = null;
     };
   }, [coordinator, input.roomId]);
 
@@ -166,18 +205,6 @@ export function useCoworkerConversation(input: {
     );
   };
 
-  const setTurnRunId = (
-    token: CoworkerConversationOperationToken,
-    turnId: string,
-    runId: string
-  ) => {
-    updateTurns(token, (current) =>
-      current.map((turn) =>
-        turn.id === turnId ? { ...turn, runId } : turn
-      )
-    );
-  };
-
   const setToolDecisionStatus = (
     token: CoworkerConversationOperationToken,
     turnId: string,
@@ -193,14 +220,9 @@ export function useCoworkerConversation(input: {
         return {
           ...turn,
           blocks: turn.blocks.map((block) => {
-            const approvalRunId =
-              block.kind === "tool"
-                ? (block.approval?.runId ?? turn.runId)
-                : null;
             if (
               block.kind !== "tool" ||
-              block.toolCallId !== identity.toolCallId ||
-              approvalRunId !== identity.runId
+              block.approval?.id !== identity.approvalId
             ) {
               return block;
             }
@@ -226,9 +248,6 @@ export function useCoworkerConversation(input: {
       }
 
       const output = createCoworkerConversationOutput(event);
-      if (output.event.runId) {
-        setTurnRunId(token, turnId, output.event.runId);
-      }
       appendOutputToTurn(token, turnId, output);
       if (output.event.type === "error") {
         streamFailed = true;
@@ -260,6 +279,7 @@ export function useCoworkerConversation(input: {
     if (!token) {
       return;
     }
+    activityEpochRef.current += 1;
 
     const turn = createConversationTurn(nextMessage);
     const abortController = new AbortController();
@@ -324,43 +344,21 @@ export function useCoworkerConversation(input: {
 
   const resolveToolApproval = async (
     turn: CoworkerConversationTurn,
-    approval: CoworkerConversationToolApproval,
+    approval: DrawlessCoworkerApprovalRequest,
     decision: "approve" | "decline"
-  ) => {
-    const runId = approval.runId ?? turn.runId;
-    if (!runId) {
-      setTurns((current) =>
-        current.map((currentTurn) =>
-          currentTurn.id === turn.id
-            ? {
-                ...currentTurn,
-                status: "error",
-                blocks: appendCoworkerConversationTextChunk(
-                  currentTurn.blocks,
-                  "\n[缺少 tool approval runId]",
-                  createLocalId
-                )
-              }
-            : currentTurn
-        )
-      );
-      setStatus("error");
-      return;
-    }
-
+  ): Promise<boolean> => {
     const identity = {
       roomId: input.roomId,
-      runId,
-      toolCallId: approval.toolCallId
+      approvalId: approval.id
     };
     if (!coordinator.acquireApproval(identity)) {
-      return;
+      return false;
     }
 
     const token = coordinator.start(input.roomId);
     if (!token) {
       coordinator.releaseApproval(identity);
-      return;
+      return false;
     }
 
     const abortController = new AbortController();
@@ -381,17 +379,16 @@ export function useCoworkerConversation(input: {
     updateStatus(token, "streaming");
 
     try {
-      const result = await createCoworkerConversationToolApprovalStream({
+      const result = await createCoworkerApprovalResolutionStream({
         roomId: identity.roomId,
-        runId: identity.runId,
-        toolCallId: identity.toolCallId,
+        approvalId: identity.approvalId,
         decision,
         serverUrl: getCoworkerServerUrl(),
         signal: abortController.signal
       });
 
       if (!coordinator.isCurrent(token)) {
-        return;
+        return false;
       }
       if (!result.ok) {
         restoreFailedApproval(
@@ -399,7 +396,7 @@ export function useCoworkerConversation(input: {
           identity,
           formatStreamError(result.error)
         );
-        return;
+        return false;
       }
 
       const nextStatus = await readStreamIntoTurn(
@@ -408,17 +405,18 @@ export function useCoworkerConversation(input: {
         result.stream
       );
       if (!nextStatus) {
-        return;
+        return false;
       }
       setTurnStatus(token, turn.id, nextStatus);
       updateStatus(token, nextStatus);
+      return nextStatus !== "awaiting_approval" && nextStatus !== "error";
     } catch (error) {
       if (!coordinator.isCurrent(token)) {
-        return;
+        return false;
       }
       if (abortController.signal.aborted) {
         cancelActiveRequest(activeRequest);
-        return;
+        return false;
       }
 
       restoreFailedApproval(
@@ -426,6 +424,7 @@ export function useCoworkerConversation(input: {
         identity,
         formatUnknownError(error)
       );
+      return false;
     } finally {
       finishActiveRequest(activeRequest);
     }
@@ -525,7 +524,6 @@ function createConversationTurn(userText: string): CoworkerConversationTurn {
   return {
     id: createLocalId(),
     userText,
-    runId: null,
     status: "receiving",
     blocks: []
   };
