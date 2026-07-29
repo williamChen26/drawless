@@ -29,7 +29,7 @@ pnpm dev:coworker:stack
 构建 runtime：
 
 ```bash
-npm run build
+pnpm build
 ```
 
 验证 server 控制面、runtime 和真实 sync room 的链路：

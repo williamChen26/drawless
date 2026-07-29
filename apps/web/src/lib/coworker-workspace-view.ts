@@ -5,6 +5,10 @@ export type CoworkerComposerPurpose =
   | "plan-adjustment"
   | "delivery-feedback";
 
+/**
+ * 用户当前展开的唯一工作表面。
+ * 这里只保存展示意图，不表示 Drew 的业务阶段，也不复制 conversation 事实。
+ */
 export type CoworkerWorkspaceSurface =
   | { kind: "closed" }
   | { kind: "current" }
@@ -25,6 +29,10 @@ export type CoworkerWorkspaceAttention =
   | { kind: "approval"; label: "等你确认" }
   | { kind: "delivery"; label: "有新交付" };
 
+/**
+ * 人物旁唯一主物件的纯派生结果。
+ * 组件不能直接保存或修改这个值，避免形成第二套工作状态。
+ */
 export type CoworkerPrimaryArtifact =
   | { kind: "none" }
   | { kind: "handoff" }
@@ -34,6 +42,14 @@ export type CoworkerPrimaryArtifact =
   | { kind: "issue" }
   | { kind: "delivery-preview" }
   | { kind: "delivery" };
+
+/**
+ * 每次进入 room 都先打开 Drew 的沟通入口。
+ * Drew 尚未在线时，同一表面会展示加入画布确认，不引入额外业务状态。
+ */
+export function createInitialCoworkerWorkspaceSurface(): CoworkerWorkspaceSurface {
+  return { kind: "composer", purpose: "open" };
+}
 
 export function reduceCoworkerWorkspaceSurface(
   _current: CoworkerWorkspaceSurface,

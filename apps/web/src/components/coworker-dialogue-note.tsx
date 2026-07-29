@@ -6,6 +6,8 @@ import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 import { normalizeCoworkerExpression } from "../lib/coworker-presence-content";
 import type { CoworkerPresencePhase } from "../lib/coworker-presence-state";
 
+import { LiquidGlassBubble } from "./liquid-glass-bubble";
+
 type CoworkerDialoguePhase = Extract<
   CoworkerPresencePhase,
   "speaking" | "completed" | "interrupted" | "error"
@@ -26,26 +28,32 @@ export function CoworkerDialogueNote({
   const expandable = normalizedText.length > preview.length;
 
   return (
-    <article
-      aria-label={getDialogueLabel(phase)}
-      className="coworker-dialogue-note"
-      data-phase={phase}
+    <LiquidGlassBubble
+      className="coworker-dialogue-bubble"
+      shape="speech"
+      tail="start"
+      tone={phase === "error" ? "danger" : "neutral"}
     >
-      <span aria-hidden="true" className="coworker-dialogue-note__tail" />
-      <header>
-        <span>{getDialogueEyebrow(phase)}</span>
-      </header>
-      <p>{preview || "我正在组织一下怎么和你说。"}</p>
-      {expandable ? (
-        <details>
-          <summary>
-            <span className="coworker-dialogue-note__read-more">阅读全文</span>
-            <span className="coworker-dialogue-note__read-less">收起全文</span>
-          </summary>
-          <div>{displayText}</div>
-        </details>
-      ) : null}
-    </article>
+      <article
+        aria-label={getDialogueLabel(phase)}
+        className="coworker-dialogue-note"
+        data-phase={phase}
+      >
+        <header>
+          <span>{getDialogueEyebrow(phase)}</span>
+        </header>
+        <p>{preview || "我正在组织一下怎么和你说。"}</p>
+        {expandable ? (
+          <details>
+            <summary>
+              <span className="coworker-dialogue-note__read-more">阅读全文</span>
+              <span className="coworker-dialogue-note__read-less">收起全文</span>
+            </summary>
+            <div>{displayText}</div>
+          </details>
+        ) : null}
+      </article>
+    </LiquidGlassBubble>
   );
 }
 

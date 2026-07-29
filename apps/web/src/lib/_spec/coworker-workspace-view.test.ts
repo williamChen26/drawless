@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createInitialCoworkerWorkspaceSurface,
   createCoworkerWorkspacePresentationKey,
   reduceCoworkerWorkspaceSurface,
   resolveCoworkerPrimaryArtifact,
@@ -9,6 +10,13 @@ import {
 } from "../coworker-workspace-view";
 
 describe("coworker workspace view", () => {
+  it("opens the Drew entry surface when a room initializes", () => {
+    expect(createInitialCoworkerWorkspaceSurface()).toEqual({
+      kind: "composer",
+      purpose: "open"
+    });
+  });
+
   it("keeps auxiliary surfaces mutually exclusive", () => {
     let surface: CoworkerWorkspaceSurface = { kind: "closed" };
     surface = reduceCoworkerWorkspaceSurface(surface, {

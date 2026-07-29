@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { CoworkerComposer, shouldSubmitCoworkerComposerOnKeyDown } from "../../components/coworker-composer";
+import { CoworkerDeliveryPreview } from "../../components/coworker-delivery-preview";
 import { CoworkerDialogueNote } from "../../components/coworker-dialogue-note";
+import { CoworkerGlassHandoff } from "../../components/coworker-glass-handoff";
 import {
   CoworkerPresenceStage
 } from "../../components/coworker-presence-stage";
@@ -56,6 +58,8 @@ describe("coworker presence components", () => {
     expect(html).not.toContain("textarea disabled");
     expect(html).toContain("button");
     expect(html).toContain("disabled");
+    expect(html).toContain("drawless-liquid-glass--control");
+    expect(html).toContain("drawless-liquid-glass--quiet");
   });
 
   it("adapts the same composer to delivery feedback without adding a mode switch", () => {
@@ -104,6 +108,8 @@ describe("coworker presence components", () => {
     expect(html).toContain("阅读全文");
     expect(html).toContain("收起全文");
     expect(html).toContain(response);
+    expect(html).toContain('data-shape="speech"');
+    expect(html).toContain("drawless-liquid-glass--neutral");
   });
 
   it("renders a completed canvas result as one editorial work note", () => {
@@ -123,6 +129,143 @@ describe("coworker presence components", () => {
     expect(html).toContain("画布成果已就位");
     expect(html).toContain("看画布成果");
     expect(html).toContain("继续调整");
+    expect(html).toContain("drawless-liquid-glass--document");
+    expect(html).toContain("drawless-liquid-glass--success");
+  });
+
+  it("maps delivery outcomes onto semantic liquid-glass tones", () => {
+    const html = renderToStaticMarkup(
+      <CoworkerDeliveryPreview
+        onExpand={vi.fn()}
+        onRequestChanges={vi.fn()}
+        outcome="partial"
+        recordIds={[]}
+        summary="完成了可安全写入的部分。"
+        warnings={["一个对象已经不存在。"]}
+      />
+    );
+
+    expect(html).toContain("drawless-liquid-glass--card");
+    expect(html).toContain("drawless-liquid-glass--warning");
+    expect(html).toContain("一个对象已经不存在");
+  });
+
+  it("turns the handoff transition into shared liquid-glass fragments", () => {
+    const html = renderToStaticMarkup(
+      <CoworkerGlassHandoff text="把登录流程整理一下" />
+    );
+
+    expect(html).toContain("把登录流程整理一下");
+    expect(html.match(/drawless-liquid-glass--accent/g)).toHaveLength(3);
+    expect(html).not.toContain("foldMark");
+  });
+
+  it("renders the offline entry as a reusable liquid-glass confirmation bubble", () => {
+    const html = renderToStaticMarkup(
+      <CoworkerPresenceStage
+        activityLogId="activity-log"
+        attentionLabel={null}
+        avatarMode="idle"
+        canCancel={false}
+        completionSummary={null}
+        entryId="coworker-entry"
+        handoff={null}
+        joinError={null}
+        joining={false}
+        latestText=""
+        latestUserText={null}
+        lifecycleState="idle"
+        message=""
+        onAvatarFocusChange={vi.fn()}
+        onAvatarHoverChange={vi.fn()}
+        onCancel={vi.fn()}
+        onCloseActivity={vi.fn()}
+        onCloseSurface={vi.fn()}
+        onComposerFocusChange={vi.fn()}
+        onJoin={vi.fn()}
+        onMessageChange={vi.fn()}
+        onOpenComposer={vi.fn()}
+        onRequestApprovalAdjustment={vi.fn()}
+        onRequestDeliveryFeedback={vi.fn()}
+        onResolveApproval={vi.fn().mockResolvedValue(true)}
+        onSend={vi.fn()}
+        onShowActivity={vi.fn()}
+        onShowDelivery={vi.fn()}
+        onToggleWorkspace={vi.fn()}
+        online={false}
+        pendingApproval={null}
+        phase="ready"
+        resultOutcome={null}
+        resultRecordIds={[]}
+        resultWarnings={[]}
+        sendDisabled={false}
+        statusText="可以开始"
+        surface={{ kind: "composer", purpose: "open" }}
+        syncOnline
+        workspaceId="workspace"
+      />
+    );
+
+    expect(html).toContain("确认加入画布");
+    expect(html).toContain("确认加入");
+    expect(html).toContain("liquid-glass-bubble__surface");
+    expect(html).toContain("liquid-glass-bubble__tail");
+    expect(html).toContain("drawless-liquid-glass--card");
+    expect(html).toContain("drawless-liquid-glass--neutral");
+    expect(html).not.toContain('role="dialog"');
+  });
+
+  it("reuses the customizable liquid-glass bubble for Drew thinking", () => {
+    const html = renderToStaticMarkup(
+      <CoworkerPresenceStage
+        activityLogId="activity-log"
+        attentionLabel={null}
+        avatarMode="working"
+        canCancel={false}
+        completionSummary={null}
+        entryId="coworker-entry"
+        handoff={null}
+        joinError={null}
+        joining={false}
+        latestText=""
+        latestUserText="整理当前流程"
+        lifecycleState="online"
+        message=""
+        onAvatarFocusChange={vi.fn()}
+        onAvatarHoverChange={vi.fn()}
+        onCancel={vi.fn()}
+        onCloseActivity={vi.fn()}
+        onCloseSurface={vi.fn()}
+        onComposerFocusChange={vi.fn()}
+        onJoin={vi.fn()}
+        onMessageChange={vi.fn()}
+        onOpenComposer={vi.fn()}
+        onRequestApprovalAdjustment={vi.fn()}
+        onRequestDeliveryFeedback={vi.fn()}
+        onResolveApproval={vi.fn().mockResolvedValue(true)}
+        onSend={vi.fn()}
+        onShowActivity={vi.fn()}
+        onShowDelivery={vi.fn()}
+        onToggleWorkspace={vi.fn()}
+        online
+        pendingApproval={null}
+        phase="thinking"
+        resultOutcome={null}
+        resultRecordIds={[]}
+        resultWarnings={[]}
+        sendDisabled
+        statusText="正在理解画布"
+        surface={{ kind: "current" }}
+        syncOnline
+        workspaceId="workspace"
+      />
+    );
+
+    expect(html).toContain("正在理解画布");
+    expect(html).toContain('data-shape="thought"');
+    expect(html).toContain("coworker-thought-bubble__content");
+    expect(html).toContain("drawless-liquid-glass--card");
+    expect(html).not.toContain("coworker-thought-bubble__trail");
   });
 
   it("renders approval as an inline work sheet instead of a dialog", () => {
@@ -140,7 +283,6 @@ describe("coworker presence components", () => {
         canCancel={false}
         completionSummary={null}
         entryId="coworker-entry"
-        frameSrc="/coworker/avatar/frame-08.webp"
         handoff={null}
         joinError={null}
         joining={false}
@@ -151,6 +293,7 @@ describe("coworker presence components", () => {
         onAvatarFocusChange={vi.fn()}
         onAvatarHoverChange={vi.fn()}
         onCancel={vi.fn()}
+        onCloseActivity={vi.fn()}
         onCloseSurface={vi.fn()}
         onComposerFocusChange={vi.fn()}
         onJoin={vi.fn()}
@@ -187,7 +330,9 @@ describe("coworker presence components", () => {
           }
         }}
         phase="awaiting-approval"
+        resultOutcome={null}
         resultRecordIds={[]}
+        resultWarnings={[]}
         sendDisabled
         statusText="等你确认"
         surface={{ kind: "current" }}
@@ -196,9 +341,17 @@ describe("coworker presence components", () => {
     );
 
     expect(html).toContain("coworker-approval-sheet");
-    expect(html).toContain("允许执行");
-    expect(html).toContain("调整一下");
+    expect(html).toContain("逐项核对");
+    expect(html).toContain("移动一个现有对象");
+    expect(html).toContain("批准并执行");
+    expect(html).toContain("退回调整");
     expect(html).toContain("暂不执行");
+    expect(html).toContain('aria-label="查看协作往来"');
+    expect(html).toContain("coworker-activity-trigger__icon");
+    expect(html).toContain("drawless-liquid-glass--control");
+    expect(html).toContain("drawless-liquid-glass--quiet");
+    expect(html).toContain("drawless-liquid-glass--document");
+    expect(html).toContain("drawless-liquid-glass--warning");
     expect(html).not.toContain('role="dialog"');
   });
 });

@@ -1,19 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
-import { Button } from "@drawless/ui";
+import { LiquidGlassSurface } from "@drawless/ui";
 
 import {
   getCoworkerAvatarLabel,
   type CoworkerAvatarMode
 } from "../lib/coworker-avatar-state";
 
+import { CoworkerAgentGlyph } from "./coworker-agent-glyph";
+
 type CoworkerAvatarEntryProps = {
   /** 当前人物表现状态。 */
   mode: CoworkerAvatarMode;
-  /** 当前人物静态帧地址。 */
-  frameSrc: string;
   /** Coworker 协作空间当前是否展开。 */
   expanded: boolean;
   /** Coworker 协作空间 DOM ID。 */
@@ -24,7 +24,7 @@ type CoworkerAvatarEntryProps = {
   lifecycleState: string;
   /** 协作空间收起后仍需提醒用户的工作事实。 */
   attentionLabel?: string | null;
-  /** 用户纸带是否正在进入人物接收区。 */
+  /** 用户交接信息是否正在进入人物接收区。 */
   receivingHandoff?: boolean;
   /** 打开或收起 Coworker 协作空间。 */
   onToggle: () => void;
@@ -36,7 +36,6 @@ type CoworkerAvatarEntryProps = {
 
 export function CoworkerAvatarEntry({
   mode,
-  frameSrc,
   expanded,
   panelId,
   entryId,
@@ -47,7 +46,6 @@ export function CoworkerAvatarEntry({
   onHoverChange,
   onFocusChange
 }: CoworkerAvatarEntryProps) {
-  const [assetFailed, setAssetFailed] = useState(false);
   const accessibleLabel = expanded
     ? `收起与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的协作空间`
     : attentionLabel
@@ -70,18 +68,6 @@ export function CoworkerAvatarEntry({
     type: "button" as const
   };
 
-  if (assetFailed) {
-    return (
-      <Button
-        {...commonProps}
-        className="coworker-avatar__fallback"
-        variant="secondary"
-      >
-        一起工作
-      </Button>
-    );
-  }
-
   return (
     <button
       {...commonProps}
@@ -91,19 +77,14 @@ export function CoworkerAvatarEntry({
       data-mode={mode}
     >
       <span className="coworker-avatar__stage" aria-hidden="true">
-        <img
-          alt=""
-          className="coworker-avatar__image"
-          draggable={false}
-          height={256}
-          onError={() => setAssetFailed(true)}
-          src={frameSrc}
-          width={256}
-        />
+        <CoworkerAgentGlyph mode={mode} />
       </span>
-      <span className="coworker-avatar__label" aria-hidden="true">
-        {visibleLabel}
-      </span>
+      <LiquidGlassSurface asChild tone="quiet" variant="control">
+        <span className="coworker-avatar__base" aria-hidden="true">
+          <span className="coworker-avatar__label">{visibleLabel}</span>
+          <span className="coworker-avatar__status" />
+        </span>
+      </LiquidGlassSurface>
     </button>
   );
 }

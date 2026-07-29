@@ -54,6 +54,7 @@ export type CoworkerConversationToolStatus =
   | "input-ready"
   | "awaiting-approval"
   | "running"
+  | "resolved"
   | "done"
   | "declined"
   | "error";
@@ -127,11 +128,14 @@ export function getCoworkerConversationPendingApproval(
 
 export function setCoworkerConversationToolStatus(
   blocks: CoworkerConversationTimelineBlock[],
-  approval: DrawlessCoworkerApprovalRequest,
-  status: Extract<CoworkerConversationToolStatus, "running" | "declined">
+  approvalId: string,
+  status: Extract<
+    CoworkerConversationToolStatus,
+    "running" | "resolved" | "declined" | "awaiting-approval" | "error"
+  >
 ): CoworkerConversationTimelineBlock[] {
   return blocks.map((block) =>
-    block.kind === "tool" && block.approval?.id === approval.id
+    block.kind === "tool" && block.approval?.id === approvalId
       ? {
           ...block,
           status

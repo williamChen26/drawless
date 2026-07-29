@@ -7,7 +7,7 @@ import React, {
   useRef
 } from "react";
 import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
-import { Button, Textarea } from "@drawless/ui";
+import { Button, LiquidGlassSurface, Textarea } from "@drawless/ui";
 
 const COMPOSER_HINT_ID = "coworker-composer-hint";
 export const COWORKER_COMPOSER_MESSAGE_ID = "coworker-composer-message";
@@ -94,36 +94,38 @@ export function CoworkerComposer({
       >
         {label}
       </label>
-      <div className="coworker-composer__surface">
-        <Textarea
-          aria-describedby={COMPOSER_HINT_ID}
-          autoFocus
-          className="coworker-composer__input"
-          id={COWORKER_COMPOSER_MESSAGE_ID}
-          maxLength={8_000}
-          onBlur={() => onFocusChange(false)}
-          onChange={(event) => onMessageChange(event.target.value)}
-          onCompositionEnd={handleCompositionEnd}
-          onCompositionStart={handleCompositionStart}
-          onFocus={() => onFocusChange(true)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          rows={2}
-          value={message}
-        />
-        <Button
-          aria-label={
-            sendDisabled
-              ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 正在处理当前工作`
-              : sendLabel
-          }
-          className="coworker-composer__send"
-          disabled={!canSend}
-          type="submit"
-        >
-          {sendLabel}
-        </Button>
-      </div>
+      <LiquidGlassSurface asChild tone="quiet" variant="control">
+        <div className="coworker-composer__surface">
+          <Textarea
+            aria-describedby={COMPOSER_HINT_ID}
+            autoFocus
+            className="coworker-composer__input"
+            id={COWORKER_COMPOSER_MESSAGE_ID}
+            maxLength={8_000}
+            onBlur={() => onFocusChange(false)}
+            onChange={(event) => onMessageChange(event.target.value)}
+            onCompositionEnd={handleCompositionEnd}
+            onCompositionStart={handleCompositionStart}
+            onFocus={() => onFocusChange(true)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            rows={2}
+            value={message}
+          />
+          <Button
+            aria-label={
+              sendDisabled
+                ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 正在处理当前工作`
+                : sendLabel
+            }
+            className="coworker-composer__send"
+            disabled={!canSend}
+            type="submit"
+          >
+            {sendLabel}
+          </Button>
+        </div>
+      </LiquidGlassSurface>
       <p className="coworker-composer__hint" id={COMPOSER_HINT_ID}>
         {sendDisabled
           ? busyHint

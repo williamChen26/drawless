@@ -133,7 +133,19 @@ describe("server app", () => {
           payload: {
             toolCallId: "call-1",
             toolName: "edit-canvas",
-            args: { roomId: "alpha", intent: "整理流程", operations: [] }
+            args: {
+              roomId: "alpha",
+              intent: "整理流程",
+              operations: [
+                {
+                  operationId: "create-1",
+                  kind: "create_shape",
+                  shapeKind: "rectangle",
+                  text: "开始",
+                  bounds: { x: 0, y: 0, w: 160, h: 80 }
+                }
+              ]
+            }
           }
         });
       },

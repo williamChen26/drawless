@@ -102,9 +102,7 @@ describe("coworker conversation timeline", () => {
 
     blocks = setCoworkerConversationToolStatus(
       blocks,
-      {
-        ...createApproval()
-      },
+      APPROVAL_ID,
       "running"
     );
     blocks = appendEvent(

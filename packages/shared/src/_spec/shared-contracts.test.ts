@@ -386,6 +386,34 @@ describe("drawless shared contracts", () => {
     ).toMatchObject({ applied: true });
   });
 
+  it("rejects ambiguous and non-sequential canvas edit references", () => {
+    expect(() =>
+      canvasEditRequestSchema.parse({
+        roomId: "alpha",
+        intent: "错误计划",
+        operations: [
+          {
+            operationId: "same",
+            kind: "create_shape",
+            shapeKind: "rectangle",
+            bounds: { x: 0, y: 0, w: 100, h: 80 }
+          },
+          {
+            operationId: "same",
+            kind: "create_arrow",
+            from: { x: 0, y: 0 },
+            to: { x: 100, y: 100 },
+            startBinding: {
+              shapeId: "shape:1",
+              operationId: "same"
+            },
+            endBinding: { operationId: "future" }
+          }
+        ]
+      })
+    ).toThrow();
+  });
+
   it("validates coworker conversation stream requests", () => {
     const request = coworkerConversationStreamRequestSchema.parse({
       roomId: "alpha",

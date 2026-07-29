@@ -2,13 +2,15 @@
 
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { DrawlessCanvasViewportContext } from "@drawless/shared";
+import { LiquidGlassProvider } from "@drawless/ui";
 
 import { resolveCoworkerAvatarMode } from "@/lib/coworker-avatar-state";
 import { getLatestCanvasEditResult } from "@/lib/coworker-presence-content";
+import type { CoworkerCanvasTargetResolver } from "@/lib/coworker-presence-content";
 import { resolveCoworkerPresenceView } from "@/lib/coworker-presence-state";
-import { useCoworkerAvatarFrame } from "@/lib/use-coworker-avatar-frame";
 import { useCoworkerConversation } from "@/lib/use-coworker-conversation";
 import {
+  createInitialCoworkerWorkspaceSurface,
   createCoworkerWorkspacePresentationKey,
   reduceCoworkerWorkspaceSurface,
   resolveCoworkerPrimaryArtifact,
@@ -25,7 +27,6 @@ import { CoworkerPresenceStage } from "./coworker-presence-stage";
 const COWORKER_WORKSPACE_ID = "coworker-workspace";
 const COWORKER_ENTRY_ID = "coworker-entry";
 const COWORKER_ACTIVITY_LOG_ID = "coworker-activity-log";
-const INITIAL_WORKSPACE_SURFACE: CoworkerWorkspaceSurface = { kind: "closed" };
 
 /**
  * 在场式 Coworker 的编排边界。业务 controller 永远挂载，收起任何 UI 都不会停止任务。
@@ -35,6 +36,7 @@ export function CoworkerConversationWindow({
   coworker,
   syncOnline,
   getCanvasViewport,
+  resolveCanvasTarget,
   onLocateResult
 }: {
   /** 当前协同房间 ID。 */
@@ -45,12 +47,14 @@ export function CoworkerConversationWindow({
   syncOnline: boolean;
   /** 发送消息时读取用户当前画布可视区。 */
   getCanvasViewport?: () => DrawlessCanvasViewportContext | null;
+  /** 从当前 tldraw document 即时读取审批所引用的对象。 */
+  resolveCanvasTarget?: CoworkerCanvasTargetResolver | undefined;
   /** 在 tldraw 中定位工具真实返回的 record IDs。 */
   onLocateResult?: ((recordIds: string[]) => void) | undefined;
 }) {
   const [surface, dispatchSurface] = useReducer(
     reduceCoworkerWorkspaceSurface,
-    INITIAL_WORKSPACE_SURFACE
+    createInitialCoworkerWorkspaceSurface()
   );
   const [entryHovered, setEntryHovered] = useState(false);
   const [entryFocused, setEntryFocused] = useState(false);
@@ -75,7 +79,6 @@ export function CoworkerConversationWindow({
     inputFocused: surface.kind === "composer" && inputFocused,
     entryEngaged: entryHovered || entryFocused
   });
-  const { frameSrc } = useCoworkerAvatarFrame(avatarMode);
   const result = presence.activeTurn
     ? getLatestCanvasEditResult(presence.activeTurn.blocks)
     : null;
@@ -139,6 +142,14 @@ export function CoworkerConversationWindow({
     });
   };
 
+  const closeActivityLog = () => {
+    acknowledgeCurrentPresentation();
+    dispatchSurface({ type: "close" });
+    window.requestAnimationFrame(() => {
+      document.getElementById(`${COWORKER_ACTIVITY_LOG_ID}-trigger`)?.focus();
+    });
+  };
+
   const toggleWorkspace = () => {
     if (surface.kind !== "closed") {
       closeSurface();
@@ -155,7 +166,7 @@ export function CoworkerConversationWindow({
     setInputFocused(false);
     setAcknowledgedPresentationKey(null);
     lastAutoOpenedPresentationKeyRef.current = null;
-    dispatchSurface({ type: "close" });
+    dispatchSurface({ type: "open-composer" });
 
     return () => {
       if (handoffTimerRef.current !== null) {
@@ -171,6 +182,10 @@ export function CoworkerConversationWindow({
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (surface.kind === "activity") {
+          closeActivityLog();
+          return;
+        }
         closeSurface();
       }
     };
@@ -245,14 +260,6 @@ export function CoworkerConversationWindow({
     return request;
   };
 
-  const closeActivityLog = () => {
-    acknowledgeCurrentPresentation();
-    dispatchSurface({ type: "close" });
-    window.requestAnimationFrame(() => {
-      document.getElementById(`${COWORKER_ACTIVITY_LOG_ID}-trigger`)?.focus();
-    });
-  };
-
   const locateResult = (recordIds: string[]) => {
     acknowledgeCurrentPresentation();
     setInputFocused(false);
@@ -266,87 +273,94 @@ export function CoworkerConversationWindow({
       data-expanded={surface.kind !== "closed"}
       data-mode={avatarMode}
       data-phase={presence.phase}
+      data-surface={surface.kind}
     >
-      <CoworkerPresenceStage
-        activityLogId={COWORKER_ACTIVITY_LOG_ID}
-        attentionLabel={
-          attention.kind === "none" ? null : attention.label
-        }
-        avatarMode={avatarMode}
-        canCancel={
-          conversation.status === "receiving" ||
-          conversation.status === "streaming"
-        }
-        completionSummary={
-          presence.phase === "completed"
-            ? result?.summary ?? null
-            : null
-        }
-        entryId={COWORKER_ENTRY_ID}
-        frameSrc={frameSrc}
-        handoff={handoff}
-        joinError={joinError}
-        joining={coworker.view.state === "loading"}
-        latestText={presence.latestText ?? ""}
-        latestUserText={presence.activeTurn?.userText ?? null}
-        lifecycleState={coworker.view.state}
-        message={conversation.message}
-        onAvatarFocusChange={setEntryFocused}
-        onAvatarHoverChange={setEntryHovered}
-        onCancel={conversation.cancel}
-        onCloseSurface={closeSurface}
-        onComposerFocusChange={setInputFocused}
-        onJoin={join}
-        onLocateResult={onLocateResult ? locateResult : undefined}
-        onMessageChange={conversation.setMessage}
-        onOpenComposer={() => openComposer()}
-        onRequestApprovalAdjustment={async ({ turn, approval }) => {
-          if (!syncOnline) {
-            return;
+      <LiquidGlassProvider>
+        <CoworkerPresenceStage
+          activityLogId={COWORKER_ACTIVITY_LOG_ID}
+          attentionLabel={
+            attention.kind === "none" ? null : attention.label
           }
-          const planReleased = await conversation.resolveToolApproval(
-            turn,
-            approval,
-            "decline"
-          );
-          if (planReleased) {
-            openComposer("plan-adjustment");
+          avatarMode={avatarMode}
+          canCancel={
+            conversation.status === "receiving" ||
+            conversation.status === "streaming"
           }
-        }}
-        onRequestDeliveryFeedback={() => openComposer("delivery-feedback")}
-        onResolveApproval={(turn, approval, decision) =>
-          syncOnline
-            ? conversation.resolveToolApproval(turn, approval, decision)
-            : Promise.resolve(false)
-        }
-        onSend={sendMessage}
-        onShowActivity={() => {
-          acknowledgeCurrentPresentation();
-          dispatchSurface({ type: "show-activity" });
-        }}
-        onShowDelivery={() => {
-          acknowledgeCurrentPresentation();
-          dispatchSurface({ type: "show-delivery" });
-        }}
-        onToggleWorkspace={toggleWorkspace}
-        online={online}
-        pendingApproval={pendingApproval}
-        phase={presence.phase}
-        resultRecordIds={result?.recordIds ?? []}
-        sendDisabled={conversation.busy || !syncOnline}
-        statusText={presence.statusText}
-        surface={surface}
-        syncOnline={syncOnline}
-        workspaceId={COWORKER_WORKSPACE_ID}
-      />
+          completionSummary={
+            presence.phase === "completed"
+              ? result?.summary ?? null
+              : null
+          }
+          resultOutcome={result?.outcome ?? null}
+          entryId={COWORKER_ENTRY_ID}
+          handoff={handoff}
+          joinError={joinError}
+          joining={coworker.view.state === "loading"}
+          latestText={presence.latestText ?? ""}
+          latestUserText={presence.activeTurn?.userText ?? null}
+          lifecycleState={coworker.view.state}
+          message={conversation.message}
+          onAvatarFocusChange={setEntryFocused}
+          onAvatarHoverChange={setEntryHovered}
+          onCancel={conversation.cancel}
+          onCloseActivity={closeActivityLog}
+          onCloseSurface={closeSurface}
+          onComposerFocusChange={setInputFocused}
+          onJoin={join}
+          onInspectApprovalTargets={onLocateResult}
+          onLocateResult={onLocateResult ? locateResult : undefined}
+          onMessageChange={conversation.setMessage}
+          onOpenComposer={() => openComposer()}
+          onRequestApprovalAdjustment={async ({ turn, approval }) => {
+            if (!syncOnline) {
+              return false;
+            }
+            const planReleased = await conversation.resolveToolApproval(
+              turn,
+              approval,
+              "decline"
+            );
+            if (planReleased) {
+              openComposer("plan-adjustment");
+            }
+            return planReleased;
+          }}
+          onRequestDeliveryFeedback={() => openComposer("delivery-feedback")}
+          onResolveApproval={(turn, approval, decision) =>
+            syncOnline
+              ? conversation.resolveToolApproval(turn, approval, decision)
+              : Promise.resolve(false)
+          }
+          onSend={sendMessage}
+          onShowActivity={() => {
+            acknowledgeCurrentPresentation();
+            dispatchSurface({ type: "show-activity" });
+          }}
+          onShowDelivery={() => {
+            acknowledgeCurrentPresentation();
+            dispatchSurface({ type: "show-delivery" });
+          }}
+          onToggleWorkspace={toggleWorkspace}
+          online={online}
+          pendingApproval={pendingApproval}
+          phase={presence.phase}
+          resultRecordIds={result?.recordIds ?? []}
+          resultWarnings={result?.warnings ?? []}
+          resolveCanvasTarget={resolveCanvasTarget}
+          sendDisabled={conversation.busy || !syncOnline}
+          statusText={presence.statusText}
+          surface={surface}
+          syncOnline={syncOnline}
+          workspaceId={COWORKER_WORKSPACE_ID}
+        />
 
-      {surface.kind === "activity" ? (
         <CoworkerActivityLog
           id={COWORKER_ACTIVITY_LOG_ID}
           onClose={closeActivityLog}
+          open={surface.kind === "activity"}
           turns={conversation.turns}
         />
-      ) : null}
+      </LiquidGlassProvider>
     </div>
   );
 }

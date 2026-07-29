@@ -13,7 +13,7 @@
     "dev:coworker": "pnpm --filter coworker dev",
     "dev:agent": "pnpm dev:coworker",
     "dev:coworker:stack": "pnpm dev:coworker & pnpm dev:server:coworker & pnpm dev:web",
-    "smoke:coworker-control": "npm --prefix apps/coworker run build && pnpm --filter @drawless/server smoke:coworker-control",
+    "smoke:coworker-control": "pnpm --filter coworker build && pnpm --filter @drawless/server smoke:coworker-control",
     "test": "pnpm --filter @drawless/shared test && pnpm --filter @drawless/server test && pnpm --filter @drawless/web test:unit",
     "typecheck": "pnpm --filter @drawless/shared typecheck && pnpm --filter @drawless/ui typecheck && pnpm --filter @drawless/server typecheck && pnpm --filter @drawless/web typecheck"
   }

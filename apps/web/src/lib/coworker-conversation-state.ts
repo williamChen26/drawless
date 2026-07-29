@@ -40,18 +40,14 @@ export type CoworkerConversationOperationCoordinator = {
   isCurrent: (token: CoworkerConversationOperationToken) => boolean;
   /** 结束指定操作；旧 token 不会影响新操作。 */
   finish: (token: CoworkerConversationOperationToken) => void;
-  /** 同步占用审批 identity，防止双击产生重复请求。 */
-  acquireApproval: (identity: CoworkerApprovalOperationIdentity) => boolean;
-  /** 释放指定审批 identity。 */
-  releaseApproval: (identity: CoworkerApprovalOperationIdentity) => void;
 };
 
 /**
  * 创建只负责并发约束的同步协调器。
  *
  * React 状态更新可能被批处理，因此“是否已经发起请求”不能只依赖 state。
- * coordinator 使用 room epoch 隔离 A → B → A 场景中的旧异步回写，并用
- * approval identity 保证同一审批在一次事件循环内也只能占用一次。
+ * coordinator 使用 room epoch 隔离 A → B → A 场景中的旧异步回写。
+ * activeOperation 已同步阻止重复请求；审批的最终原子占用由 server 负责。
  */
 export function createCoworkerConversationOperationCoordinator(
   initialRoomId: string
@@ -60,7 +56,6 @@ export function createCoworkerConversationOperationCoordinator(
   let roomEpoch = 0;
   let nextOperationId = 1;
   let activeOperation: CoworkerConversationOperationToken | null = null;
-  const activeApprovals = new Set<string>();
 
   const enterRoom = (roomId: string) => {
     if (roomId === currentRoomId) {
@@ -70,7 +65,6 @@ export function createCoworkerConversationOperationCoordinator(
     currentRoomId = roomId;
     roomEpoch += 1;
     activeOperation = null;
-    activeApprovals.clear();
   };
 
   return {
@@ -100,28 +94,6 @@ export function createCoworkerConversationOperationCoordinator(
       if (activeOperation === token) {
         activeOperation = null;
       }
-    },
-    acquireApproval(identity) {
-      if (identity.roomId !== currentRoomId) {
-        return false;
-      }
-
-      const key = createCoworkerApprovalOperationKey(identity);
-      if (activeApprovals.has(key)) {
-        return false;
-      }
-
-      activeApprovals.add(key);
-      return true;
-    },
-    releaseApproval(identity) {
-      activeApprovals.delete(createCoworkerApprovalOperationKey(identity));
     }
   };
-}
-
-export function createCoworkerApprovalOperationKey(
-  identity: CoworkerApprovalOperationIdentity
-) {
-  return JSON.stringify([identity.roomId, identity.approvalId]);
 }

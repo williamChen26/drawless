@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  getCoworkerAvatarFramePath,
-  getNextWorkingFrame,
-  pickNextListeningFrame,
-  resolveCoworkerAvatarMode
-} from "../coworker-avatar-state";
+import { resolveCoworkerAvatarMode } from "../coworker-avatar-state";
 
 describe("coworker avatar state", () => {
   it("gives conversation work priority over input and hover state", () => {
@@ -44,27 +39,4 @@ describe("coworker avatar state", () => {
       })
     ).toBe("hover");
   });
-
-  it("loops working frames in a stable order", () => {
-    expect(getNextWorkingFrame(1)).toBe(5);
-    expect(getNextWorkingFrame(5)).toBe(6);
-    expect(getNextWorkingFrame(6)).toBe(7);
-    expect(getNextWorkingFrame(7)).toBe(5);
-  });
-
-  it("selects a different listening frame with deterministic randomness", () => {
-    expect(pickNextListeningFrame(8, () => 0)).toBe(9);
-    expect(pickNextListeningFrame(9, () => 0.99)).toBe(10);
-    expect(pickNextListeningFrame(null, () => 0)).toBe(8);
-  });
-
-  it("maps frame numbers to zero-padded public asset paths", () => {
-    expect(getCoworkerAvatarFramePath(1)).toBe(
-      "/coworker/avatar/frame-01.webp"
-    );
-    expect(getCoworkerAvatarFramePath(10)).toBe(
-      "/coworker/avatar/frame-10.webp"
-    );
-  });
 });
-

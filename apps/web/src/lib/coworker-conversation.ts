@@ -25,6 +25,8 @@ export type CoworkerConversationStreamError = {
   message: string;
   /** 原始错误或响应内容，便于排查链路问题。 */
   raw: unknown;
+  /** HTTP 请求失败时的状态码；本地校验错误为空。 */
+  status?: number | undefined;
 };
 
 export type CoworkerConversationStreamResult =
@@ -55,7 +57,7 @@ export type CoworkerApprovalRecoveryResult =
       error: CoworkerConversationStreamError;
     };
 
-export async function loadCoworkerPendingApprovals(input: {
+type LoadCoworkerApprovalsInput = {
   /** 当前协同房间 ID。 */
   roomId: string;
   /** drawless server 的 HTTP 或 WebSocket 基础地址。 */
@@ -64,7 +66,20 @@ export async function loadCoworkerPendingApprovals(input: {
   fetcher?: typeof fetch;
   /** 切换房间或卸载时用于中断恢复请求。 */
   signal?: AbortSignal;
-}): Promise<CoworkerApprovalRecoveryResult> {
+};
+
+export function loadCoworkerPendingApprovals(
+  input: LoadCoworkerApprovalsInput
+) {
+  return loadCoworkerApprovals({ ...input, status: "pending" });
+}
+
+export async function loadCoworkerApprovals(
+  input: LoadCoworkerApprovalsInput & {
+    /** 只读取指定状态；省略时读取仍在 registry 中的全部审批。 */
+    status?: "pending" | "resolving" | "resolved" | undefined;
+  }
+): Promise<CoworkerApprovalRecoveryResult> {
   const roomId = parseDrawlessRoomId(input.roomId);
   if (!roomId.ok) {
     return {
@@ -97,7 +112,7 @@ export async function loadCoworkerPendingApprovals(input: {
     createCoworkerApprovalListUrl({
       baseUrl: serverUrl.value,
       roomId: roomId.value,
-      status: "pending"
+      status: input.status
     }),
     requestInit
   );
@@ -109,8 +124,9 @@ export async function loadCoworkerPendingApprovals(input: {
         code: "HTTP_ERROR",
         message:
           extractErrorMessage(raw) ??
-          `无法恢复 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的待确认计划（${response.status}）。`,
-        raw
+          `无法读取 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的审批记录（${response.status}）。`,
+        raw,
+        status: response.status
       }
     };
   }
@@ -121,7 +137,7 @@ export async function loadCoworkerPendingApprovals(input: {
       ok: false,
       error: {
         code: "INVALID_RESPONSE",
-        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 的待确认计划返回了无法识别的数据。`,
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 的审批记录返回了无法识别的数据。`,
         raw
       }
     };
@@ -213,7 +229,8 @@ export async function createCoworkerConversationStream(input: {
         message:
           extractErrorMessage(raw) ??
           `暂时无法收到 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应（${response.status}）。`,
-        raw
+        raw,
+        status: response.status
       }
     };
   }
@@ -305,7 +322,8 @@ export async function createCoworkerApprovalResolutionStream(input: {
         message:
           extractErrorMessage(raw) ??
           `暂时无法继续 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应（${response.status}）。`,
-        raw
+        raw,
+        status: response.status
       }
     };
   }
@@ -385,8 +403,8 @@ function createCoworkerApprovalListUrl(input: {
   baseUrl: string;
   /** 当前协同房间 ID。 */
   roomId: string;
-  /** 要恢复的审批生命周期状态。 */
-  status: "pending";
+  /** 要读取的审批生命周期状态；省略时读取全部。 */
+  status?: "pending" | "resolving" | "resolved" | undefined;
 }) {
   const url = new URL(input.baseUrl);
   url.pathname = joinUrlPath(
@@ -396,7 +414,9 @@ function createCoworkerApprovalListUrl(input: {
     "coworker",
     "approvals"
   );
-  url.searchParams.set("status", input.status);
+  if (input.status) {
+    url.searchParams.set("status", input.status);
+  }
   return url.toString();
 }
 

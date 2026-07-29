@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createCoworkerApprovalSummary,
-  createCoworkerResultSummary,
-  getLatestSemanticSegment
+  createCoworkerResultSummary
 } from "../coworker-presence-content";
 
 describe("coworker presence content", () => {
@@ -41,6 +40,11 @@ describe("coworker presence content", () => {
       intent: "整理登录流程",
       operationCount: 3,
       operationSummary: "新增 1 项 · 移动 1 项 · 连接 1 项",
+      operations: [
+        expect.objectContaining({ action: "新增", title: "新增矩形" }),
+        expect.objectContaining({ action: "移动", title: "移动一个现有对象" }),
+        expect.objectContaining({ action: "连接", title: "新增一条连接线" })
+      ],
       scope: "当前页面",
       structured: true,
       canApprove: true,
@@ -107,17 +111,27 @@ describe("coworker presence content", () => {
         summary: "已经连接关键节点"
       })
     ).toEqual({
+      outcome: "success",
       summary: "已经连接关键节点",
       recordIds: ["shape:1", "shape:2", "shape:3"],
       warnings: []
     });
   });
 
-  it("keeps only the latest readable semantic segment", () => {
+  it("does not present a validated no-op result as a successful delivery", () => {
     expect(
-      getLatestSemanticSegment("我已经整理了结构。接下来会连接关键节点。")
-    ).toBe("接下来会连接关键节点。");
-    expect(getLatestSemanticSegment("x".repeat(140))).toHaveLength(120);
+      createCoworkerResultSummary({
+        roomId: "room-1",
+        applied: false,
+        createdRecordIds: [],
+        updatedRecordIds: [],
+        warnings: ["目标对象已经不存在"],
+        summary: "没有修改画布"
+      })
+    ).toMatchObject({
+      outcome: "not-applied",
+      warnings: ["目标对象已经不存在"]
+    });
   });
 });
 

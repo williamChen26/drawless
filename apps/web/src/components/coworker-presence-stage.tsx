@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import {
   DRAWLESS_COWORKER_DISPLAY_NAME,
   DRAWLESS_COWORKER_ROLE_LABEL,
   type DrawlessCoworkerApprovalRequest
 } from "@drawless/shared";
-import { Button } from "@drawless/ui";
+import { Button, LiquidGlassSurface } from "@drawless/ui";
 
 import type { CoworkerAvatarMode } from "../lib/coworker-avatar-state";
 import {
-  createCoworkerApprovalSummary,
-  splitSemanticParagraphs
+  splitSemanticParagraphs,
+  type CoworkerCanvasTargetResolver
 } from "../lib/coworker-presence-content";
 import type { CoworkerPresencePhase } from "../lib/coworker-presence-state";
 import type { CoworkerConversationTurn } from "../lib/use-coworker-conversation";
@@ -22,29 +22,25 @@ import {
 } from "../lib/coworker-workspace-view";
 
 import { CoworkerAvatarEntry } from "./coworker-avatar-entry";
+import {
+  CoworkerApprovalSheet,
+  type CoworkerPendingApprovalView
+} from "./coworker-approval-sheet";
 import { CoworkerComposer } from "./coworker-composer";
 import { CoworkerDeliveryPreview } from "./coworker-delivery-preview";
 import { CoworkerDialogueNote } from "./coworker-dialogue-note";
-import { CoworkerPaperHandoff } from "./coworker-paper-handoff";
+import { LiquidGlassBubble } from "./liquid-glass-bubble";
+import { CoworkerGlassHandoff } from "./coworker-glass-handoff";
 import {
   CoworkerResultNote,
   type CoworkerResultNotePhase
 } from "./coworker-result-note";
-
-export type CoworkerPendingApprovalView = {
-  /** 审批所属的对话轮次。 */
-  turn: CoworkerConversationTurn;
-  /** 等待用户决定的工具调用。 */
-  approval: DrawlessCoworkerApprovalRequest;
-};
 
 export type CoworkerPresenceStageProps = {
   /** 人物在当前任务中的业务阶段。 */
   phase: CoworkerPresencePhase;
   /** 给用户看的简短阶段说明。 */
   statusText: string;
-  /** 当前人物静态帧地址。 */
-  frameSrc: string;
   /** 当前人物表现模式。 */
   avatarMode: CoworkerAvatarMode;
   /** coworker room 生命周期状态。 */
@@ -61,7 +57,7 @@ export type CoworkerPresenceStageProps = {
   activityLogId: string;
   /** 最近一次提交给 Drew 的原始文本。 */
   latestUserText: string | null;
-  /** 只用于表现交接过程的短暂纸带，不作为业务事实源。 */
+  /** 只用于表现交接过程的短暂玻璃片，不作为业务事实源。 */
   handoff: { id: number; text: string } | null;
   /** Coworker 当前或最近一次面向用户的正文。 */
   latestText: string;
@@ -69,8 +65,14 @@ export type CoworkerPresenceStageProps = {
   pendingApproval: CoworkerPendingApprovalView | null;
   /** 完成凭证的人类可读摘要。 */
   completionSummary: string | null;
+  /** 真实工具结果派生的交付结果。 */
+  resultOutcome: "success" | "partial" | "not-applied" | null;
   /** 真实工具结果给出的画布 record ID，仅作为定位引用。 */
   resultRecordIds: string[];
+  /** 工具执行期间跳过、降级或失败的说明。 */
+  resultWarnings: string[];
+  /** 从当前 tldraw document 即时读取被修改对象。 */
+  resolveCanvasTarget?: CoworkerCanvasTargetResolver | undefined;
   /** 当前尚未发送的用户草稿。 */
   message: string;
   /** 当前任务是否阻止再次发送。 */
@@ -91,6 +93,8 @@ export type CoworkerPresenceStageProps = {
   onToggleWorkspace: () => void;
   /** 收起当前辅助表面。 */
   onCloseSurface: () => void;
+  /** 收起协作往来并把键盘焦点还给边缘页签。 */
+  onCloseActivity: () => void;
   /** 展开完整工作说明。 */
   onShowDelivery: () => void;
   /** 打开协作往来。 */
@@ -98,7 +102,7 @@ export type CoworkerPresenceStageProps = {
   /** 放下当前计划并进入调整说明。 */
   onRequestApprovalAdjustment: (
     approvalView: CoworkerPendingApprovalView
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   /** 回到沟通入口反馈当前交付。 */
   onRequestDeliveryFeedback: () => void;
   /** 更新人物入口 hover 状态。 */
@@ -123,6 +127,8 @@ export type CoworkerPresenceStageProps = {
   ) => Promise<boolean>;
   /** 在画布中定位真实工具结果引用的 records。 */
   onLocateResult?: ((recordIds: string[]) => void) | undefined;
+  /** 在不收起审批单的前提下定位被修改对象。 */
+  onInspectApprovalTargets?: ((recordIds: string[]) => void) | undefined;
 };
 
 /**
@@ -131,7 +137,6 @@ export type CoworkerPresenceStageProps = {
 export function CoworkerPresenceStage({
   phase,
   statusText,
-  frameSrc,
   avatarMode,
   lifecycleState,
   entryId,
@@ -144,7 +149,10 @@ export function CoworkerPresenceStage({
   latestText,
   pendingApproval,
   completionSummary,
+  resultOutcome,
   resultRecordIds,
+  resultWarnings,
+  resolveCanvasTarget,
   message,
   sendDisabled,
   syncOnline = true,
@@ -155,6 +163,7 @@ export function CoworkerPresenceStage({
   onOpenComposer,
   onToggleWorkspace,
   onCloseSurface,
+  onCloseActivity,
   onShowDelivery,
   onShowActivity,
   onRequestApprovalAdjustment,
@@ -167,7 +176,8 @@ export function CoworkerPresenceStage({
   onCancel,
   onJoin,
   onResolveApproval,
-  onLocateResult
+  onLocateResult,
+  onInspectApprovalTargets
 }: CoworkerPresenceStageProps) {
   const showReceipt = phase === "completed" && completionSummary;
   const artifact = resolveCoworkerPrimaryArtifact({
@@ -183,7 +193,6 @@ export function CoworkerPresenceStage({
   const composerCopy = getComposerCopy(
     composerOpen ? surface.purpose : "open"
   );
-
   return (
     <section
       aria-label={`与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的协作空间`}
@@ -192,11 +201,36 @@ export function CoworkerPresenceStage({
       data-phase={phase}
     >
       <div className="coworker-presence-stage__anchor">
+        <LiquidGlassSurface asChild tone="quiet" variant="control">
+          <Button
+            aria-controls={activityLogId}
+            aria-expanded={activityOpen}
+            aria-label={activityOpen ? "收起协作往来" : "查看协作往来"}
+            className="coworker-activity-trigger"
+            id={`${activityLogId}-trigger`}
+            onClick={activityOpen ? onCloseActivity : onShowActivity}
+            size="sm"
+            tabIndex={activityOpen ? -1 : undefined}
+            type="button"
+            variant="ghost"
+          >
+            <svg
+              aria-hidden="true"
+              className="coworker-activity-trigger__icon"
+              fill="none"
+              viewBox="0 0 18 18"
+            >
+              <path d="M5 3.5h9.5v11H5z" />
+              <path d="M7.5 6.5H12M7.5 9H12M7.5 11.5h3.25" />
+              <path d="M3.5 5.25h1.5M3.5 8.25h1.5M3.5 11.25h1.5" />
+            </svg>
+            <span>往来</span>
+          </Button>
+        </LiquidGlassSurface>
         <CoworkerAvatarEntry
           attentionLabel={attentionLabel}
           entryId={entryId}
           expanded={surface.kind !== "closed"}
-          frameSrc={frameSrc}
           lifecycleState={lifecycleState}
           mode={avatarMode}
           onFocusChange={onAvatarFocusChange}
@@ -209,29 +243,37 @@ export function CoworkerPresenceStage({
 
       <div className="coworker-presence-stage__exchange" id={workspaceId}>
         {artifact.kind === "handoff" ? (
-          <CoworkerPaperHandoff
+          <CoworkerGlassHandoff
             key={handoff?.id}
             text={summarizeHandoff(handoff?.text ?? latestUserText ?? "")}
           />
         ) : null}
 
         {artifact.kind === "thought" ? (
-          <div
-            aria-hidden="true"
+          <LiquidGlassBubble
             className="coworker-thought-bubble"
-            data-phase={phase}
+            shape="thought"
+            tail="start"
+            tone={phase === "executing" ? "accent" : "neutral"}
           >
-            <span className="coworker-thought-bubble__trail" />
-            <p>{statusText}</p>
-          </div>
+            <div
+              aria-hidden="true"
+              className="coworker-thought-bubble__content"
+              data-phase={phase}
+            >
+              <p>{statusText}</p>
+            </div>
+          </LiquidGlassBubble>
         ) : null}
 
         {artifact.kind === "approval" && pendingApproval ? (
           <CoworkerApprovalSheet
             approvalView={pendingApproval}
             disabled={!syncOnline}
+            onInspectCanvasTargets={onInspectApprovalTargets}
             onRequestAdjustment={onRequestApprovalAdjustment}
             onResolve={onResolveApproval}
+            resolveCanvasTarget={resolveCanvasTarget}
           />
         ) : null}
 
@@ -249,7 +291,9 @@ export function CoworkerPresenceStage({
             onLocateResult={onLocateResult}
             onRequestChanges={onRequestDeliveryFeedback}
             recordIds={resultRecordIds}
+            outcome={resultOutcome ?? "not-applied"}
             summary={completionSummary}
+            warnings={resultWarnings}
           />
         ) : null}
 
@@ -258,69 +302,89 @@ export function CoworkerPresenceStage({
             completionSummary={completionSummary}
             onLocateResult={onLocateResult}
             onRequestChanges={onRequestDeliveryFeedback}
+            outcome={resultOutcome ?? "not-applied"}
             paragraphs={splitSemanticParagraphs(latestText)}
             phase={phase}
             recordIds={resultRecordIds}
-            title={getResultNoteTitle(phase, resultRecordIds.length > 0)}
+            title={getResultNoteTitle(phase, resultOutcome)}
+            warnings={resultWarnings}
           />
         ) : null}
 
         {!online && composerOpen ? (
-          <section
-            aria-label={`允许 ${DRAWLESS_COWORKER_DISPLAY_NAME} 加入`}
-            className="coworker-join-note"
+          <LiquidGlassBubble
+            className="coworker-join-bubble"
+            tail="start"
+            tone="neutral"
           >
-            <div>
-              <strong>{DRAWLESS_COWORKER_DISPLAY_NAME} · {DRAWLESS_COWORKER_ROLE_LABEL}</strong>
-              <p>允许后，我会作为协作者读取当前画布；需要编辑时，会先请你确认。</p>
-            </div>
-            {joinError ? <p role="alert">{joinError}</p> : null}
-            <Button
-              disabled={joining || !syncOnline}
-              onClick={onJoin}
-              type="button"
+            <section
+              aria-label={`确认 ${DRAWLESS_COWORKER_DISPLAY_NAME} 加入画布`}
+              className="coworker-join-note"
             >
-              {!syncOnline ? "等待画布同步" : joining ? "正在加入" : "允许加入"}
-            </Button>
-          </section>
+              <header>
+                <span>
+                  {DRAWLESS_COWORKER_DISPLAY_NAME} ·{" "}
+                  {DRAWLESS_COWORKER_ROLE_LABEL}
+                </span>
+                <strong>确认加入画布</strong>
+              </header>
+              <p>
+                加入后，我会作为协作者读取当前画布；需要编辑时，会先请你确认。
+              </p>
+              {joinError ? <p role="alert">{joinError}</p> : null}
+              <Button
+                disabled={joining || !syncOnline}
+                onClick={onJoin}
+                type="button"
+              >
+                {!syncOnline
+                  ? "等待画布同步"
+                  : joining
+                    ? "正在加入…"
+                    : "确认加入"}
+              </Button>
+            </section>
+          </LiquidGlassBubble>
         ) : null}
 
         {online && composerOpen ? (
-          <section
-            aria-label={`与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 沟通`}
-            className="coworker-presence-stage__composer"
-          >
-            <header className="coworker-presence-stage__composer-header">
-              <div>
-                <span>{composerCopy.title}</span>
-                <strong>{statusText}</strong>
-              </div>
-              <Button
-                aria-label={`收起与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的沟通入口`}
-                onClick={onCloseSurface}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                收好
-              </Button>
-            </header>
-            <CoworkerComposer
-              busyHint={
-                syncOnline
-                  ? getComposerBusyHint(phase)
-                  : "画布正在重新连接，恢复同步后再继续。"
-              }
-              label={composerCopy.label}
-              message={message}
-              onFocusChange={onComposerFocusChange}
-              onMessageChange={onMessageChange}
-              onSend={onSend}
-              placeholder={composerCopy.placeholder}
-              sendLabel={composerCopy.sendLabel}
-              sendDisabled={sendDisabled}
-            />
-          </section>
+          <LiquidGlassSurface asChild tone="neutral" variant="document">
+            <section
+              aria-label={`与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 沟通`}
+              className="coworker-presence-stage__composer"
+            >
+              <header className="coworker-presence-stage__composer-header">
+                <div>
+                  <span>{composerCopy.title}</span>
+                  <strong>{statusText}</strong>
+                </div>
+                <Button
+                  aria-label={`收起与 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的沟通入口`}
+                  onClick={onCloseSurface}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  收好
+                </Button>
+              </header>
+              <CoworkerComposer
+                busyHint={
+                  syncOnline
+                    ? getComposerBusyHint(phase)
+                    : "画布正在重新连接，恢复同步后再继续。"
+                }
+                label={composerCopy.label}
+                message={message}
+                onFocusChange={onComposerFocusChange}
+                onMessageChange={onMessageChange}
+                onSend={onSend}
+                placeholder={composerCopy.placeholder}
+                sendLabel={composerCopy.sendLabel}
+                sendDisabled={sendDisabled}
+              />
+            </section>
+          </LiquidGlassSurface>
         ) : null}
 
         <div
@@ -329,41 +393,36 @@ export function CoworkerPresenceStage({
           role="group"
         >
           {artifact.kind === "dialogue" || artifact.kind === "issue" ? (
-            <Button
-              onClick={onOpenComposer}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              继续聊
-            </Button>
+            <LiquidGlassSurface asChild tone="quiet" variant="control">
+              <Button
+                onClick={onOpenComposer}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                继续聊
+              </Button>
+            </LiquidGlassSurface>
           ) : null}
           {canCancel ? (
-            <Button onClick={onCancel} size="sm" type="button" variant="ghost">
-              先停一下
-            </Button>
+            <LiquidGlassSurface asChild tone="quiet" variant="control">
+              <Button onClick={onCancel} size="sm" type="button" variant="ghost">
+                先停一下
+              </Button>
+            </LiquidGlassSurface>
           ) : null}
           {surface.kind === "current" || surface.kind === "delivery" ? (
-            <Button
-              onClick={onCloseSurface}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              收好
-            </Button>
+            <LiquidGlassSurface asChild tone="quiet" variant="control">
+              <Button
+                onClick={onCloseSurface}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                收好
+              </Button>
+            </LiquidGlassSurface>
           ) : null}
-          <Button
-            aria-controls={activityLogId}
-            aria-expanded={activityOpen}
-            id={`${activityLogId}-trigger`}
-            onClick={activityOpen ? onCloseSurface : onShowActivity}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            {activityOpen ? "收起协作往来" : "协作往来"}
-          </Button>
         </div>
       </div>
 
@@ -377,117 +436,6 @@ export function CoworkerPresenceStage({
           ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 已完成：${completionSummary}`
           : statusText}
       </p>
-    </section>
-  );
-}
-
-function CoworkerApprovalSheet({
-  approvalView,
-  disabled,
-  onResolve,
-  onRequestAdjustment
-}: {
-  approvalView: CoworkerPendingApprovalView;
-  disabled: boolean;
-  onResolve: CoworkerPresenceStageProps["onResolveApproval"];
-  onRequestAdjustment: CoworkerPresenceStageProps["onRequestApprovalAdjustment"];
-}) {
-  const { turn, approval } = approvalView;
-  const plan = createCoworkerApprovalSummary(approval);
-  const [pendingAction, setPendingAction] = useState<
-    "approve" | "decline" | "adjust" | null
-  >(null);
-
-  const resolve = async (decision: "approve" | "decline") => {
-    if (pendingAction) {
-      return;
-    }
-    setPendingAction(decision);
-    try {
-      await onResolve(turn, approval, decision);
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const requestAdjustment = async () => {
-    if (pendingAction) {
-      return;
-    }
-    setPendingAction("adjust");
-    try {
-      await onRequestAdjustment(approvalView);
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  return (
-    <section
-      aria-label={`${DRAWLESS_COWORKER_DISPLAY_NAME} 等待你的确认`}
-      className="coworker-approval-sheet"
-      data-pending={Boolean(pendingAction)}
-    >
-      <header>
-        <span>等你决定</span>
-        <strong>{plan.title}</strong>
-      </header>
-      <p>{plan.intent}</p>
-      {plan.validationMessage ? (
-        <p className="coworker-approval-sheet__validation" role="alert">
-          {plan.validationMessage}
-        </p>
-      ) : null}
-      {plan.structured ? (
-        <details open>
-          <summary>查看工作计划</summary>
-          <dl>
-            <div>
-              <dt>影响范围</dt>
-              <dd>{plan.scope}</dd>
-            </div>
-            <div>
-              <dt>操作数量</dt>
-              <dd>{plan.operationCount} 项</dd>
-            </div>
-            {plan.operationSummary ? (
-              <div>
-                <dt>计划内容</dt>
-                <dd>{plan.operationSummary}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </details>
-      ) : null}
-      <div className="coworker-approval-sheet__actions">
-        <Button
-          disabled={disabled || Boolean(pendingAction) || !plan.canApprove}
-          onClick={() => void resolve("approve")}
-          type="button"
-        >
-          {pendingAction === "approve"
-            ? "正在继续"
-            : plan.canApprove
-              ? "允许执行"
-              : "计划不可执行"}
-        </Button>
-        <Button
-          disabled={disabled || Boolean(pendingAction)}
-          onClick={() => void requestAdjustment()}
-          type="button"
-          variant="secondary"
-        >
-          {pendingAction === "adjust" ? "正在收回计划" : "调整一下"}
-        </Button>
-        <Button
-          disabled={disabled || Boolean(pendingAction)}
-          onClick={() => void resolve("decline")}
-          type="button"
-          variant="ghost"
-        >
-          {pendingAction === "decline" ? "正在暂缓" : "暂不执行"}
-        </Button>
-      </div>
     </section>
   );
 }
@@ -541,10 +489,16 @@ function isResultNotePhase(
 
 function getResultNoteTitle(
   phase: CoworkerResultNotePhase,
-  hasCanvasResult: boolean
+  outcome: CoworkerPresenceStageProps["resultOutcome"]
 ) {
-  if (phase === "completed" && hasCanvasResult) {
+  if (phase === "completed" && outcome === "success") {
     return "我完成了这次画布修改";
+  }
+  if (phase === "completed" && outcome === "partial") {
+    return "我完成了部分画布修改";
+  }
+  if (phase === "completed" && outcome === "not-applied") {
+    return "这次没有修改画布";
   }
   if (phase === "completed") {
     return "画布修改已经完成";

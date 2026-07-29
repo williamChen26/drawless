@@ -192,8 +192,8 @@ export const canvasEditArrowBindingTargetSchema = z
     shapeId: z.string().trim().min(1).optional(),
     operationId: z.string().trim().min(1).max(120).optional()
   })
-  .refine((value) => Boolean(value.shapeId || value.operationId), {
-    message: "Arrow binding target must include shapeId or operationId."
+  .refine((value) => Boolean(value.shapeId) !== Boolean(value.operationId), {
+    message: "Arrow binding target must include exactly one target reference."
   }) satisfies z.ZodType<DrawlessCanvasEditArrowBindingTarget>;
 
 export const canvasEditCreateShapeOperationSchema = canvasEditOperationBaseSchema.extend({
@@ -240,12 +240,55 @@ export const canvasEditOperationSchema = z.discriminatedUnion("kind", [
   canvasEditCreateArrowOperationSchema
 ]) satisfies z.ZodType<DrawlessCanvasEditOperation>;
 
-export const canvasEditRequestSchema = z.object({
-  roomId: roomIdSchema,
-  currentPageId: z.string().trim().min(1).nullable().optional(),
-  intent: z.string().trim().min(1).max(1_000),
-  operations: z.array(canvasEditOperationSchema).min(1).max(20)
-}) satisfies z.ZodType<DrawlessCanvasEditRequest>;
+export const canvasEditRequestSchema = z
+  .object({
+    roomId: roomIdSchema,
+    currentPageId: z.string().trim().min(1).nullable().optional(),
+    intent: z.string().trim().min(1).max(1_000),
+    operations: z.array(canvasEditOperationSchema).min(1).max(20)
+  })
+  .superRefine((request, context) => {
+    const operationIds = new Set<string>();
+    const precedingCreateShapeIds = new Set<string>();
+
+    request.operations.forEach((operation, index) => {
+      if (operationIds.has(operation.operationId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Canvas edit operation IDs must be unique.",
+          path: ["operations", index, "operationId"]
+        });
+      }
+      operationIds.add(operation.operationId);
+
+      if (operation.kind === "create_arrow") {
+        [operation.startBinding, operation.endBinding].forEach(
+          (binding, bindingIndex) => {
+            if (
+              binding?.operationId &&
+              !precedingCreateShapeIds.has(binding.operationId)
+            ) {
+              context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message:
+                  "Arrow operation references must target a preceding create_shape operation.",
+                path: [
+                  "operations",
+                  index,
+                  bindingIndex === 0 ? "startBinding" : "endBinding",
+                  "operationId"
+                ]
+              });
+            }
+          }
+        );
+      }
+
+      if (operation.kind === "create_shape") {
+        precedingCreateShapeIds.add(operation.operationId);
+      }
+    });
+  }) satisfies z.ZodType<DrawlessCanvasEditRequest>;
 
 export const canvasEditResultSchema = z.object({
   roomId: roomIdSchema,

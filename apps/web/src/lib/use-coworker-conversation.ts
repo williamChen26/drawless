@@ -10,6 +10,7 @@ import {
 import {
   createCoworkerConversationStream,
   createCoworkerApprovalResolutionStream,
+  loadCoworkerApprovals,
   loadCoworkerPendingApprovals,
   readCoworkerConversationEventStream,
   type CoworkerConversationStreamError
@@ -26,6 +27,7 @@ import {
   appendCoworkerConversationOutputBlock,
   appendCoworkerConversationTextChunk,
   createRecoveredCoworkerApprovalBlocks,
+  setCoworkerConversationToolStatus,
   type CoworkerConversationTimelineBlock
 } from "./coworker-conversation-timeline";
 
@@ -47,8 +49,6 @@ type ActiveConversationRequest = {
   turnId: string;
   /** 用于显式取消 fetch 和流读取。 */
   abortController: AbortController;
-  /** 当前操作对应的审批 identity；普通消息为 null。 */
-  approvalIdentity: CoworkerApprovalOperationIdentity | null;
 };
 
 export function useCoworkerConversation(input: {
@@ -126,9 +126,6 @@ export function useCoworkerConversation(input: {
       if (activeRequest && activeRequest.token.roomId === input.roomId) {
         activeRequest.abortController.abort();
         coordinator.finish(activeRequest.token);
-        if (activeRequest.approvalIdentity) {
-          coordinator.releaseApproval(activeRequest.approvalIdentity);
-        }
         activeRequestRef.current = null;
       }
     };
@@ -210,7 +207,7 @@ export function useCoworkerConversation(input: {
     token: CoworkerConversationOperationToken,
     turnId: string,
     identity: CoworkerApprovalOperationIdentity,
-    nextStatus: "running" | "declined" | "awaiting-approval"
+    nextStatus: "running" | "resolved" | "declined" | "awaiting-approval" | "error"
   ) => {
     updateTurns(token, (current) =>
       current.map((turn) => {
@@ -220,16 +217,11 @@ export function useCoworkerConversation(input: {
 
         return {
           ...turn,
-          blocks: turn.blocks.map((block) => {
-            if (
-              block.kind !== "tool" ||
-              block.approval?.id !== identity.approvalId
-            ) {
-              return block;
-            }
-
-            return { ...block, status: nextStatus };
-          })
+          blocks: setCoworkerConversationToolStatus(
+            turn.blocks,
+            identity.approvalId,
+            nextStatus
+          )
         };
       })
     );
@@ -287,8 +279,7 @@ export function useCoworkerConversation(input: {
     const activeRequest: ActiveConversationRequest = {
       token,
       turnId: turn.id,
-      abortController,
-      approvalIdentity: null
+      abortController
     };
     activeRequestRef.current = activeRequest;
     setTurns((current) => [...current, turn]);
@@ -352,13 +343,8 @@ export function useCoworkerConversation(input: {
       roomId: input.roomId,
       approvalId: approval.id
     };
-    if (!coordinator.acquireApproval(identity)) {
-      return false;
-    }
-
     const token = coordinator.start(input.roomId);
     if (!token) {
-      coordinator.releaseApproval(identity);
       return false;
     }
 
@@ -366,8 +352,7 @@ export function useCoworkerConversation(input: {
     const activeRequest: ActiveConversationRequest = {
       token,
       turnId: turn.id,
-      abortController,
-      approvalIdentity: identity
+      abortController
     };
     activeRequestRef.current = activeRequest;
     setToolDecisionStatus(
@@ -392,9 +377,10 @@ export function useCoworkerConversation(input: {
         return false;
       }
       if (!result.ok) {
-        restoreFailedApproval(
+        await reconcileFailedApproval(
           activeRequest,
           identity,
+          decision,
           formatStreamError(result.error)
         );
         return false;
@@ -420,15 +406,80 @@ export function useCoworkerConversation(input: {
         return false;
       }
 
-      restoreFailedApproval(
+      await reconcileFailedApproval(
         activeRequest,
         identity,
+        decision,
         formatUnknownError(error)
       );
       return false;
     } finally {
       finishActiveRequest(activeRequest);
     }
+  };
+
+  const reconcileFailedApproval = async (
+    activeRequest: ActiveConversationRequest,
+    identity: CoworkerApprovalOperationIdentity,
+    decision: "approve" | "decline",
+    errorMessage: string
+  ) => {
+    const result = await loadCoworkerApprovals({
+      roomId: identity.roomId,
+      serverUrl: getCoworkerServerUrl(),
+      signal: activeRequest.abortController.signal
+    }).catch(() => null);
+
+    if (!coordinator.isCurrent(activeRequest.token)) {
+      return;
+    }
+
+    const snapshot = result?.ok
+      ? result.approvals.find(
+          (candidate) => candidate.approval.id === identity.approvalId
+        )
+      : null;
+    if (result?.ok && !snapshot) {
+      appendTextToTurn(
+        activeRequest.token,
+        activeRequest.turnId,
+        "\n[这份计划已经失效]\n请让 Drew 根据当前画布重新整理计划。"
+      );
+      setToolDecisionStatus(
+        activeRequest.token,
+        activeRequest.turnId,
+        identity,
+        "error"
+      );
+      setTurnStatus(activeRequest.token, activeRequest.turnId, "error");
+      updateStatus(activeRequest.token, "error");
+      return;
+    }
+    if (!snapshot || snapshot.status === "pending") {
+      restoreFailedApproval(activeRequest, identity, errorMessage);
+      return;
+    }
+
+    const externallyResolving = snapshot.status === "resolving";
+    appendTextToTurn(
+      activeRequest.token,
+      activeRequest.turnId,
+      externallyResolving
+        ? "\n[决定正在另一处处理]\n请稍后查看画布或协作往来，不需要重复提交。"
+        : `\n[决定已经提交]\n${
+            snapshot.decision === "decline" || decision === "decline"
+              ? "这份计划已不再执行。"
+              : "执行结果没有同步回当前页面，请直接查看画布。"
+          }`
+    );
+    setToolDecisionStatus(
+      activeRequest.token,
+      activeRequest.turnId,
+      identity,
+      externallyResolving ? "running" : "resolved"
+    );
+    setTurnStatus(activeRequest.token, activeRequest.turnId, "done");
+    updateStatus(activeRequest.token, "done");
   };
 
   const restoreFailedApproval = (
@@ -454,9 +505,6 @@ export function useCoworkerConversation(input: {
 
   const finishActiveRequest = (activeRequest: ActiveConversationRequest) => {
     coordinator.finish(activeRequest.token);
-    if (activeRequest.approvalIdentity) {
-      coordinator.releaseApproval(activeRequest.approvalIdentity);
-    }
     if (activeRequestRef.current === activeRequest) {
       activeRequestRef.current = null;
     }
@@ -466,9 +514,6 @@ export function useCoworkerConversation(input: {
     const wasCurrent = coordinator.isCurrent(activeRequest.token);
     activeRequest.abortController.abort();
     coordinator.finish(activeRequest.token);
-    if (activeRequest.approvalIdentity) {
-      coordinator.releaseApproval(activeRequest.approvalIdentity);
-    }
     if (activeRequestRef.current === activeRequest) {
       activeRequestRef.current = null;
     }

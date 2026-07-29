@@ -1,8 +1,7 @@
 .note {
   --note-ink: oklch(29% 0.035 68deg);
   --note-muted: oklch(49% 0.035 70deg);
-  --note-paper: oklch(97.5% 0.026 88deg);
-  --note-rule: oklch(82% 0.04 78deg / 55%);
+  --note-rule: oklch(62% 0.04 245deg / 22%);
   --note-accent: oklch(55% 0.14 48deg);
   --note-ease: cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
@@ -12,54 +11,10 @@
   flex-direction: column;
   container-type: inline-size;
   width: min(100%, 40rem);
+  border-radius: 28px;
   color: var(--note-ink);
-  background:
-    linear-gradient(90deg, transparent 0 3.75rem, oklch(68% 0.12 28deg / 33%) 3.75rem 3.82rem, transparent 3.82rem),
-    var(--note-paper);
-  border: 1px solid oklch(73% 0.04 75deg);
-  box-shadow:
-    0.28rem 0.36rem 0 oklch(39% 0.045 62deg / 15%),
-    0 1.1rem 2.5rem oklch(31% 0.035 65deg / 13%);
   transform-origin: 50% 0;
   animation: note-arrive 380ms var(--note-ease) both;
-}
-
-.note::before {
-  position: absolute;
-  z-index: -2;
-  inset: 0.42rem -0.38rem -0.34rem 0.45rem;
-  border: 1px solid oklch(76% 0.035 75deg);
-  background: oklch(93% 0.025 82deg);
-  box-shadow: 0.18rem 0.22rem 0 oklch(40% 0.04 60deg / 10%);
-  content: "";
-  transform: rotate(0.7deg);
-}
-
-.note::after {
-  position: absolute;
-  z-index: -1;
-  inset: -0.28rem 0.5rem 0.3rem -0.32rem;
-  border: 1px solid oklch(79% 0.03 76deg);
-  background: oklch(95% 0.022 87deg);
-  content: "";
-  transform: rotate(-0.45deg);
-}
-
-.clip {
-  position: absolute;
-  z-index: 2;
-  top: -0.58rem;
-  left: 50%;
-  width: 3.9rem;
-  height: 1.1rem;
-  border: 1px solid oklch(46% 0.018 75deg);
-  border-radius: 0.16rem;
-  background:
-    linear-gradient(180deg, oklch(87% 0.008 75deg), oklch(60% 0.014 75deg) 47%, oklch(78% 0.01 75deg) 52%, oklch(54% 0.012 75deg));
-  box-shadow:
-    inset 0 1px oklch(98% 0.005 75deg / 70%),
-    0 0.15rem 0.2rem oklch(30% 0.02 65deg / 22%);
-  transform: translateX(-50%) rotate(-1deg);
 }
 
 .header {
@@ -67,7 +22,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: clamp(1.6rem, 5cqi, 2.4rem) clamp(1.15rem, 5cqi, 2.3rem) 1.15rem clamp(4.5rem, 13cqi, 5.5rem);
+  padding: clamp(1.5rem, 5cqi, 2.25rem) clamp(1.15rem, 5cqi, 2.3rem) 1.15rem;
   border-bottom: 1px solid var(--note-rule);
 }
 
@@ -108,7 +63,7 @@
 }
 
 .title {
-  max-width: 22ch;
+  max-width: 100%;
   margin: 0;
   font-family: "Songti SC", "STSong", serif;
   font-size: clamp(1.22rem, 5cqi, 1.72rem);
@@ -147,14 +102,7 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: clamp(1.15rem, 4cqi, 1.75rem) clamp(1.15rem, 5cqi, 2.3rem) clamp(1.6rem, 5cqi, 2.25rem) clamp(0.8rem, 3cqi, 1.15rem);
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 1.84rem,
-    var(--note-rule) 1.87rem,
-    transparent 1.9rem
-  );
+  padding: clamp(1.15rem, 4cqi, 1.75rem) clamp(1.15rem, 5cqi, 2.3rem) clamp(1.6rem, 5cqi, 2.25rem);
 }
 
 .copy:focus-visible {
@@ -164,7 +112,7 @@
 
 .paragraphRow {
   display: grid;
-  grid-template-columns: 2.45rem minmax(0, 1fr);
+  grid-template-columns: 2rem minmax(0, 1fr);
   gap: 0.8rem;
   align-items: baseline;
   animation: paragraph-enter 280ms var(--note-ease) both;
@@ -207,7 +155,7 @@
 }
 
 .emptyCopy {
-  margin: 0 0 0 3.25rem;
+  margin: 0;
   color: var(--note-muted);
   font-family: "Songti SC", "STSong", serif;
   font-size: 0.95rem;
@@ -219,7 +167,7 @@
   display: block;
   width: min(9rem, 38%);
   height: 1px;
-  margin: 1.1rem 0 0 3.25rem;
+  margin: 1.1rem 0 0;
   background: var(--note-accent);
   transform-origin: left center;
   animation: writing-progress 1.5s var(--note-ease) infinite;
@@ -232,23 +180,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 1.4rem;
-  margin: 0 clamp(1.15rem, 5cqi, 2.3rem) 0 clamp(4.5rem, 13cqi, 5.5rem);
+  margin: 0 clamp(1.15rem, 5cqi, 2.3rem);
   padding: 1.15rem 0 1.35rem;
   border-top: 1px dashed oklch(58% 0.045 68deg / 55%);
   animation: receipt-enter 340ms var(--note-ease) both;
-}
-
-.receipt::before,
-.endNote::before {
-  position: absolute;
-  top: -0.19rem;
-  left: -0.55rem;
-  width: 0.34rem;
-  height: 0.34rem;
-  border: 1px solid oklch(58% 0.045 68deg / 65%);
-  border-radius: 50%;
-  background: var(--note-paper);
-  content: "";
 }
 
 .receiptCopy {
@@ -279,6 +214,25 @@
   line-height: 1.4;
 }
 
+.warnings {
+  display: grid;
+  gap: 0.28rem;
+  margin: 0.38rem 0 0;
+  padding-left: 1rem;
+  color: oklch(42% 0.065 55deg);
+  font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.note[data-outcome="partial"] {
+  --note-accent: oklch(57% 0.12 70deg);
+}
+
+.note[data-outcome="not-applied"] {
+  --note-accent: oklch(52% 0.15 28deg);
+}
+
 .receiptActions {
   display: flex;
   flex: 0 0 auto;
@@ -290,7 +244,7 @@
   flex: 0 0 auto;
   min-height: 2.25rem;
   border-color: var(--note-ink);
-  border-radius: 0;
+  border-radius: 999px;
   background: transparent;
   color: var(--note-ink);
   font-family: "PingFang SC", "Hiragino Sans GB", sans-serif;
@@ -303,7 +257,7 @@
 
 .locateButton:hover {
   background: var(--note-ink);
-  color: var(--note-paper);
+  color: oklch(97% 0.01 245deg);
   transform: translateY(-1px);
 }
 
@@ -337,19 +291,14 @@
 @container (max-width: 27rem) {
   .header {
     gap: 0.75rem;
-    padding-left: 4rem;
   }
 
   .folio span {
     display: none;
   }
 
-  .copy {
-    padding-left: 0.55rem;
-  }
-
   .paragraphRow {
-    grid-template-columns: 2.25rem minmax(0, 1fr);
+    grid-template-columns: 1.8rem minmax(0, 1fr);
     gap: 0.65rem;
   }
 
@@ -358,7 +307,6 @@
     align-items: stretch;
     flex-direction: column;
     gap: 0.85rem;
-    margin-left: 4rem;
   }
 
   .locateButton {

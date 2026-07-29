@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   DRAWLESS_COWORKER_DISPLAY_NAME,
+  canvasEditRequestSchema,
   type DrawlessRoomId
 } from "@drawless/shared";
 
@@ -75,14 +76,17 @@ export function createCoworkerPublicEventStream(input: {
         );
       }
       try {
+        const registration = createApprovalRegistration({
+          roomId: input.roomId,
+          toolName,
+          proposal: getToolArguments(event, payload)
+        });
         approval = input.approvalRegistry.register({
           id: operationId,
           roomId: input.roomId,
           runId: runtimeRunId,
           toolCallId: runtimeToolCallId,
-          capability: mapToolToCapability(toolName),
-          risk: "write",
-          proposal: getToolArguments(event, payload)
+          ...registration
         });
       } catch (error) {
         return encodePublicStreamError(
@@ -120,6 +124,44 @@ export function createCoworkerPublicEventStream(input: {
       }
     })
   );
+}
+
+function createApprovalRegistration(input: {
+  roomId: DrawlessRoomId;
+  toolName: string | null;
+  proposal: unknown;
+}) {
+  const capability = mapToolToCapability(input.toolName);
+  if (capability !== "canvas.edit") {
+    throw new Error("这项能力暂时没有可验证的审批策略，已停止执行。");
+  }
+
+  const proposal = canvasEditRequestSchema.safeParse(
+    parseStructuredProposal(input.proposal)
+  );
+  if (!proposal.success) {
+    throw new Error("画布编辑计划没有通过安全校验，已停止执行。");
+  }
+  if (proposal.data.roomId !== input.roomId) {
+    throw new Error("画布编辑计划与当前房间不一致，已停止执行。");
+  }
+
+  return {
+    capability,
+    risk: "write" as const,
+    proposal: proposal.data
+  };
+}
+
+function parseStructuredProposal(proposal: unknown) {
+  if (typeof proposal !== "string") {
+    return proposal;
+  }
+  try {
+    return JSON.parse(proposal) as unknown;
+  } catch {
+    return proposal;
+  }
 }
 
 function sanitizeRuntimeEvent(

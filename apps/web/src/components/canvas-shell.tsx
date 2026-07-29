@@ -148,6 +148,9 @@ function SyncedCanvasShell({
           roomId={collaboration.roomId}
           syncOnline={statusView.state === "online"}
           getCanvasViewport={() => createCanvasViewportContext(editorRef.current)}
+          resolveCanvasTarget={(shapeId) =>
+            resolveCanvasTarget(editorRef.current, shapeId)
+          }
           onLocateResult={(recordIds) =>
             locateCanvasResult(editorRef.current, recordIds)
           }
@@ -155,6 +158,23 @@ function SyncedCanvasShell({
       </div>
     </CanvasShellFrame>
   );
+}
+
+function resolveCanvasTarget(editor: Editor | null, shapeId: string) {
+  if (!editor || !isShapeId(shapeId)) {
+    return null;
+  }
+  const shape = editor.getShape(shapeId);
+  if (!shape) {
+    return null;
+  }
+
+  // 审批打开时从 tldraw 即时读取名称和类型；不缓存 shape，也不形成第二份画布事实源。
+  const text = editor.getShapeUtil(shape).getText(shape)?.trim() || null;
+  return {
+    label: text,
+    shapeKind: shape.type
+  };
 }
 
 function locateCanvasResult(editor: Editor | null, recordIds: string[]) {
