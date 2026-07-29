@@ -14,11 +14,11 @@ export type CollaborationState =
   | {
       /** 当前分支是否已经成功生成协同连接配置。 */
       ok: true;
-      /** 当前画布房间 ID，用于生成房间链接。 */
+      /** 当前画布房间 ID，用于 coworker 与协作会话。 */
       roomId: string;
       /** `useSync` 连接后端 WebSocket 房间时使用的完整地址。 */
       roomUri: string;
-      /** 顶部逻辑壳层显示的当前参与者标签，由设备名和标签页名组成。 */
+      /** debug 模式显示的当前参与者标签，由设备名和标签页名组成。 */
       participantLabel: string;
       /** tldraw 使用的用户信息 store，用于协同在线状态和用户元数据。 */
       users: TLUserStore;
@@ -26,7 +26,7 @@ export type CollaborationState =
   | {
       /** 当前分支是否已经成功生成协同连接配置。 */
       ok: false;
-      /** 协同配置失败原因，直接渲染为调试信息。 */
+      /** 协同配置失败原因，用于生成用户提示和 debug 诊断信息。 */
       error: SyncConfigError;
     };
 

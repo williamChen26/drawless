@@ -1,30 +1,41 @@
-# coworker
+# drawless coworker runtime
 
-Welcome to your new [Mastra](https://mastra.ai/) project! We're excited to see what you'll build.
+这个应用是 Drew 的 Mastra runtime。`Drew` 是用户可见姓名，`画布搭档` 是角色说明；`coworker` 只作为目录、包、API 和内部领域名称。
 
-## Getting Started
+## 职责
 
-Start the development server:
+- 以独立协作者身份连接 drawless 的 tldraw sync room。
+- 从本地同步的 `TLStore` 派生只读画布上下文。
+- 处理 conversation chat 和 cursor chat。
+- 通过 `edit-canvas` 提交结构化计划，并在用户明确批准后写回画布。
+- 保持 tldraw document 为唯一画布事实源。
 
-```shell
-npm run dev
+## 本地运行
+
+在仓库根目录执行：
+
+```bash
+pnpm dev:coworker
 ```
 
-Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/studio/overview). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+默认 Mastra 服务地址是 `http://127.0.0.1:4111`。完整联调需要同时启动 web、server 和 coworker：
 
-You can start editing files inside the `src/mastra` directory. The development server will automatically reload whenever you make changes.
+```bash
+pnpm dev:coworker:stack
+```
 
-## Learn more
+## 验证
 
-To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). Your bootstrapped project includes example code for [agents](https://mastra.ai/docs/agents/overview), [tools](https://mastra.ai/docs/agents/using-tools), [workflows](https://mastra.ai/docs/workflows/overview), [scorers](https://mastra.ai/docs/evals/overview), and [observability](https://mastra.ai/docs/observability/overview).
+构建 runtime：
 
-If you're new to AI agents, check out our [course](https://mastra.ai/learn) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
+```bash
+pnpm build
+```
 
-## Deploy to the Mastra platform
+验证 server 控制面、runtime 和真实 sync room 的链路：
 
-The [Mastra platform](https://projects.mastra.ai) provides two products for deploying and managing AI applications built with the Mastra framework:
+```bash
+pnpm smoke:coworker-control
+```
 
-- **Studio**: A hosted visual environment for testing agents, running workflows, and inspecting traces
-- **Server**: A production deployment target that runs your Mastra application as an API server
-
-Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).
+共享身份、审批和画布操作契约统一定义在 `packages/shared`，不要在本应用中另建跨端 payload。

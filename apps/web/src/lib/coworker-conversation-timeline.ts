@@ -1,7 +1,11 @@
 import type {
+  DrawlessCoworkerApprovalRequest,
+  DrawlessCoworkerApprovalSnapshot
+} from "@drawless/shared";
+
+import type {
   CoworkerConversationEventSummary,
-  CoworkerConversationOutput,
-  CoworkerConversationToolApproval
+  CoworkerConversationOutput
 } from "./coworker-conversation-output";
 
 export type CoworkerConversationTimelineBlock =
@@ -27,8 +31,8 @@ export type CoworkerConversationToolBlock = {
   id: string;
   /** 工具模块。 */
   kind: "tool";
-  /** Mastra tool call ID；用于把 input delta、approval、result 聚到一起。 */
-  toolCallId: string;
+  /** Server 生成的公开操作 ID；用于把 input delta、approval、result 聚到一起。 */
+  operationId: string;
   /** 工具名称；部分异常事件里可能缺失。 */
   toolName: string | null;
   /** 工具参数流拼接出的原始 JSON 文本。 */
@@ -40,8 +44,8 @@ export type CoworkerConversationToolBlock = {
   /** 当前工具调用的生命周期状态。 */
   status: CoworkerConversationToolStatus;
   /** 需要用户确认的 tool call；普通工具事件为 null。 */
-  approval: CoworkerConversationToolApproval | null;
-  /** 与该 toolCallId 相关的原始 stream event。 */
+  approval: DrawlessCoworkerApprovalRequest | null;
+  /** 与该 operationId 相关的公开 stream event。 */
   events: CoworkerConversationEventEntry[];
 };
 
@@ -50,6 +54,7 @@ export type CoworkerConversationToolStatus =
   | "input-ready"
   | "awaiting-approval"
   | "running"
+  | "resolved"
   | "done"
   | "declined"
   | "error";
@@ -110,7 +115,7 @@ export function appendCoworkerConversationTextChunk(
 
 export function getCoworkerConversationPendingApproval(
   blocks: CoworkerConversationTimelineBlock[]
-): CoworkerConversationToolApproval | null {
+): DrawlessCoworkerApprovalRequest | null {
   for (let index = blocks.length - 1; index >= 0; index -= 1) {
     const block = blocks[index];
     if (block?.kind === "tool" && block.status === "awaiting-approval") {
@@ -121,30 +126,44 @@ export function getCoworkerConversationPendingApproval(
   return null;
 }
 
-export function hasCoworkerConversationApproval(
-  block: CoworkerConversationTimelineBlock,
-  approval: CoworkerConversationToolApproval
-) {
-  return (
-    block.kind === "tool" &&
-    block.toolCallId === approval.toolCallId &&
-    block.approval?.runId === approval.runId
-  );
-}
-
 export function setCoworkerConversationToolStatus(
   blocks: CoworkerConversationTimelineBlock[],
-  approval: CoworkerConversationToolApproval,
-  status: Extract<CoworkerConversationToolStatus, "running" | "declined">
+  approvalId: string,
+  status: Extract<
+    CoworkerConversationToolStatus,
+    "running" | "resolved" | "declined" | "awaiting-approval" | "error"
+  >
 ): CoworkerConversationTimelineBlock[] {
   return blocks.map((block) =>
-    block.kind === "tool" && block.toolCallId === approval.toolCallId
+    block.kind === "tool" && block.approval?.id === approvalId
       ? {
           ...block,
           status
         }
       : block
   );
+}
+
+/**
+ * 从 server 的公开生命周期快照恢复待审批工具块，不复制 runtime 私有标识。
+ */
+export function createRecoveredCoworkerApprovalBlocks(
+  approvals: DrawlessCoworkerApprovalSnapshot[]
+): CoworkerConversationToolBlock[] {
+  return approvals
+    .filter((snapshot) => snapshot.status === "pending")
+    .map(({ approval }) => ({
+      id: `recovered-approval:${approval.id}`,
+      kind: "tool",
+      operationId: approval.id,
+      toolName: getToolNameForCapability(approval.capability),
+      argsText: "",
+      args: approval.proposal,
+      result: null,
+      status: "awaiting-approval",
+      approval,
+      events: []
+    }));
 }
 
 function appendTextChunk(
@@ -206,22 +225,22 @@ function appendToolEvent(
   summary: CoworkerConversationEventSummary,
   createId: CoworkerConversationIdFactory
 ): CoworkerConversationTimelineBlock[] {
-  const toolCallId = getToolCallId(summary.raw) ?? summary.approval?.toolCallId;
-  if (!toolCallId) {
+  const operationId = getOperationId(summary.raw) ?? summary.approval?.id;
+  if (!operationId) {
     return appendDebugEvent(blocks, summary, createId);
   }
 
   const event = { id: createId(), summary };
   const index = blocks.findIndex(
-    (block) => block.kind === "tool" && block.toolCallId === toolCallId
+    (block) => block.kind === "tool" && block.operationId === operationId
   );
   const current =
     index >= 0 && blocks[index]?.kind === "tool"
       ? (blocks[index] as CoworkerConversationToolBlock)
       : createToolBlock({
           createId,
-          toolCallId,
-          toolName: getToolName(summary.raw) ?? summary.approval?.toolName ?? null,
+          operationId,
+          toolName: getToolName(summary.raw)
         });
   const next = updateToolBlock(current, summary, event);
 
@@ -234,13 +253,13 @@ function appendToolEvent(
 
 function createToolBlock(input: {
   createId: CoworkerConversationIdFactory;
-  toolCallId: string;
+  operationId: string;
   toolName: string | null;
 }): CoworkerConversationToolBlock {
   return {
     id: input.createId(),
     kind: "tool",
-    toolCallId: input.toolCallId,
+    operationId: input.operationId,
     toolName: input.toolName,
     argsText: "",
     args: null,
@@ -261,10 +280,10 @@ function updateToolBlock(
   const nextArgsText = argsTextDelta
     ? `${block.argsText}${argsTextDelta}`
     : block.argsText;
-  const explicitArgs = getToolArgs(summary.raw) ?? summary.approval?.args;
+  const explicitArgs = getToolArgs(summary.raw) ?? summary.approval?.proposal;
   const nextArgs = explicitArgs ?? parseArgsText(nextArgsText) ?? block.args;
   const explicitResult = getToolResult(summary.raw);
-  const toolName = getToolName(summary.raw) ?? summary.approval?.toolName ?? block.toolName;
+  const toolName = getToolName(summary.raw) ?? block.toolName;
 
   return {
     ...block,
@@ -367,14 +386,19 @@ function getTextId(event: unknown) {
   return getStringField(payload, "id") ?? getStringField(event, "id");
 }
 
-function getToolCallId(event: unknown) {
+function getOperationId(event: unknown) {
   const payload = getObjectField(event, "payload");
   return (
-    getStringField(payload, "toolCallId") ??
-    getStringField(payload, "id") ??
-    getStringField(event, "toolCallId") ??
-    getStringField(event, "id")
+    getStringField(payload, "operationId") ??
+    getStringField(event, "operationId")
   );
+}
+
+function getToolNameForCapability(capability: string) {
+  if (capability === "canvas.edit") {
+    return "edit-canvas";
+  }
+  return null;
 }
 
 function getToolName(event: unknown) {

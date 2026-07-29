@@ -1,23 +1,26 @@
 # drawless 架构说明
 
-本文档记录当前阶段的项目逻辑和需求边界。当前阶段不追求 UI 表达，只保证协作画布链路清晰、可验证、可扩展。
+本文档记录当前项目的运行逻辑和需求边界。Drew 是用户可见的数字同事姓名；代码、接口和部署配置继续使用 `coworker` 作为内部领域名称。
 
 ## 架构目标
 
-drawless 的核心目标是保留一个最小 tldraw 协作系统：
+drawless 的核心目标是让用户、其他协作者和 Drew 在同一个 tldraw room 中持续协作：
 
-- 前端负责房间路由、浏览器身份、tldraw editor 挂载。
-- 后端负责 WebSocket 协同连接和 `TLSocketRoom` 生命周期。
-- 共享包负责跨前后端复用的类型、schema 和校验逻辑。
-- AI 能力以后接入，但当前不进入运行链路。
+- 前端负责房间路由、浏览器身份、tldraw editor 挂载，以及 Drew 的在场、沟通、审批和交付呈现。
+- 后端负责 WebSocket 协同连接、`TLSocketRoom` 生命周期，以及 coworker 控制面和公开审批边界。
+- coworker runtime 以独立协作者身份进入同一个 room，负责画布观察、对话、计划和受控编辑。
+- 共享包负责跨 web、server 和 coworker runtime 复用的类型、schema、身份、审批和画布操作契约。
+- tldraw document 始终是画布的唯一事实源。
 
 ## 包职责
 
 | 包 | 职责 |
 | --- | --- |
-| `apps/web` | Next.js 应用。根路径创建房间并跳转到 `/rooms/:roomId`；房间页挂载 tldraw；客户端用 `@tldraw/sync` 连接后端。 |
-| `apps/server` | Fastify 服务。提供 `/health`、`/ready` 和 `/sync/:roomId` WebSocket 路由；每个房间映射一个进程内 `TLSocketRoom`。 |
-| `packages/shared` | 共享类型和 Zod schema。包含房间 ID、会话 ID、参与者身份、协同配置、服务状态、AI 扩展点等契约。 |
+| `apps/web` | Next.js 应用。负责 room 路由、tldraw 挂载、浏览器协作者身份、Drew 的人物入口和协作往来。 |
+| `apps/server` | Fastify 服务。负责健康检查、tldraw sync、room 注册表、coworker 生命周期代理、conversation stream 和公开审批解析。 |
+| `apps/coworker` | Mastra runtime。Drew 通过独立 tldraw sync client 进入 room，读取派生上下文，并通过受控工具申请画布编辑。 |
+| `packages/shared` | 共享类型和 Zod schema。包含 room、身份、同步、画布观察、受控编辑、conversation 和审批契约。 |
+| `packages/ui` | web 使用的基础 UI 原语，不承载 coworker 业务状态。 |
 
 ## 当前运行链路
 
@@ -33,6 +36,20 @@ drawless 的核心目标是保留一个最小 tldraw 协作系统：
 10. 后端校验来源、房间 ID、会话 ID。
 11. 后端从房间注册表获取或创建 `TLSocketRoom`。
 12. 多个客户端连接同一房间时，共享同一份进程内协同状态。
+
+## Drew 协作链路
+
+1. 用户点击 Drew 的人物入口。
+2. 如果 coworker 尚未进入 room，web 经 server 的 `/rooms/:roomId/coworker/start` 请求加入。
+3. server 校验 room 和配置后，把受控参数转发给 coworker runtime。
+4. coworker runtime 创建独立 sync client，以 `Drew` 作为 presence 展示姓名进入同一个 room。
+5. 用户发送消息时，web 经 server 打开 conversation SSE stream。
+6. Drew 需要理解画布时，通过 `collect-canvas-context` 从本地同步的 `TLStore` 派生只读上下文。
+7. Drew 需要修改画布时，通过 `edit-canvas` 产生结构化计划；web 展示公开审批请求。
+8. 用户明确允许后，coworker runtime 临时切换为可写模式，通过自己的 `TLStore` 写回 sync room。
+9. web 从真实工具结果中只保留摘要和 record ID，用于展示交付和定位画布成果。
+
+conversation、run、toolCallId 和 sessionId 只属于技术控制面，不构成用户需要管理的会话模型。
 
 ## 后端协同模型
 
@@ -55,46 +72,48 @@ drawless 的核心目标是保留一个最小 tldraw 协作系统：
 
 ## 前端模型
 
-当前前端只保留必要壳层：
+当前前端由画布壳层和 Drew 在场层组成：
 
-- 顶部显示项目名、同步状态、当前设备/标签页、房间链接。
-- 主区域完全交给 tldraw。
-- 不添加自定义工具栏。
-- 不添加 AI 面板。
-- 不添加产品化视觉设计。
+- 顶部保留项目名、同步状态、当前设备/标签页和房间链接；coworker 生命周期按钮只在 debug 配置下显示。
+- 主区域由 tldraw 承载真实画布内容。
+- Drew 驻留在画布边缘，通过人物、对白、交接纸带、计划单和交付便笺表达真实协作状态。
+- web 不保存第二份画布结构，也不直接控制 Mastra 私有 run/tool call 标识。
 
 前端关键模块：
 
 - `src/components/canvas-shell.tsx`：房间页面客户端组合根。
+- `src/components/coworker-conversation-window.tsx`：Drew 在场和协作状态的客户端组合根。
+- `src/components/coworker-presence-stage.tsx`：人物入口、沟通、审批和交付的单一主表面。
 - `src/lib/sync-config.ts`：协同地址和会话配置。
 - `src/lib/device-identity.ts`：浏览器设备 ID。
 - `src/lib/room-route.ts`：房间 ID 和路由决策。
 
 ## 共享类型策略
 
-`packages/shared` 是后续扩展的类型入口。当前要求：
+`packages/shared` 是所有跨进程业务契约的入口。当前要求：
 
 - 前后端共享的结构都优先放在 shared。
 - 每个类型属性保留中文注释。
 - 运行时边界尽量配套 Zod schema。
-- AI 相关类型先保留扩展点，不实现行为。
+- 用户可见姓名和协同 presence 默认姓名使用共享常量，避免 web 与 coworker runtime 漂移。
 
-## AI 接入边界
+## coworker runtime 边界
 
-当前 AI 不进入项目运行链路。后续接入时建议遵守：
-
-- AI 不直接操作浏览器里的 tldraw editor。
-- AI 相关输入、输出、上下文、动作契约先进入 `packages/shared`。
-- AI 对画布的修改需要通过明确的后端或前端受控边界。
-- tldraw 文档仍然是画布事实源，不再维护第二套图结构事实源。
+- Drew 不直接操作浏览器里的 tldraw editor。
+- 画布上下文从 coworker 已同步的 `TLStore` 派生，不把原始 WebSocket 包直接交给模型。
+- `collect-canvas-context` 只读；`edit-canvas` 是当前唯一写画布工具。
+- 正式写操作必须经过结构化计划和明确审批，模糊聊天文本不构成授权。
+- server 持有公开 approvalId 与私有 run/toolCallId 的映射，web 不接触 Mastra 私有控制标识。
+- 所有画布写入最终经过 tldraw sync；conversation 和交付记录不复制第二份画布事实。
 
 ## 当前存储边界
 
-当前存储是进程内存：
+当前协同房间和审批注册表主要是进程内状态；coworker memory 可按配置使用本地存储：
 
 - 适合本地验证协同链路。
-- 后端重启会丢失画布数据。
-- 多进程或多实例部署会导致同一房间分裂。
+- 后端重启会丢失当前画布和挂起审批的进程状态。
+- coworker runtime 重启后，正在等待审批的 Mastra run 不保证可继续。
+- 多进程或多实例部署会导致同一房间分裂，除非增加全局房间调度。
 
 后续持久化改造优先位置：
 
@@ -110,4 +129,4 @@ drawless 的核心目标是保留一个最小 tldraw 协作系统：
 pnpm check
 ```
 
-它覆盖 shared、server、web 的基础测试、类型检查和构建。当前阶段不要求视觉回归测试，因为 UI 不是本阶段目标。
+它覆盖 shared、ui、server 和 web 的单测、类型检查、构建与基础协同 smoke。`apps/coworker` 的 Mastra build 和完整控制面 smoke 由 `pnpm smoke:coworker-control` 单独验证。

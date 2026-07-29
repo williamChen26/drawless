@@ -176,13 +176,13 @@ export class DrawlessCoworkerRoomRegistry {
     if (!entry || !entry.client) {
       return createUnavailableCanvasContextSnapshot({
         roomId,
-        reason: 'coworker 尚未进入这个 room，无法读取画布上下文。',
+        reason: 'Drew 尚未进入这个 room，无法读取画布上下文。',
       });
     }
     if (entry.status === 'error' || entry.status === 'stopped') {
       return createUnavailableCanvasContextSnapshot({
         roomId,
-        reason: `coworker room client 当前状态为 ${entry.status}，无法读取画布上下文。`,
+        reason: `Drew 的协同连接当前状态为 ${entry.status}，无法读取画布上下文。`,
       });
     }
 
@@ -202,13 +202,13 @@ export class DrawlessCoworkerRoomRegistry {
     if (!entry || !entry.client) {
       return createUnavailableCanvasEditResult({
         roomId,
-        reason: 'coworker 尚未进入这个 room，无法写入画布。',
+        reason: 'Drew 尚未进入这个 room，无法写入画布。',
       });
     }
     if (entry.status !== 'online') {
       return createUnavailableCanvasEditResult({
         roomId,
-        reason: `coworker room client 当前状态为 ${entry.status}，尚未在线，无法写入画布。`,
+        reason: `Drew 的协同连接当前状态为 ${entry.status}，尚未在线，无法写入画布。`,
       });
     }
 
@@ -391,9 +391,9 @@ export class DrawlessCoworkerRoomRegistry {
 }
 
 const INTRO_CURSOR_CHAT_MESSAGES = [
-  '你好，我已进入画布。',
-  '可在cursor chat短聊。',
-  '点“对话”可派任务。',
+  '你好，我是 Drew，已经来到画布。',
+  '在光标旁可以和我短聊。',
+  '点我的人物可以交代工作。',
 ];
 // 入场提示依赖 tldraw 的 presence overlay；稍微延迟能让 web 端先渲染出 coworker 光标。
 const INTRO_CURSOR_CHAT_INITIAL_DELAY_MS = 800;
@@ -427,13 +427,15 @@ function createConversationPrompt(request: DrawlessCoworkerConversationStreamReq
     : ['本次 conversation 没有收到用户可视区上下文；创建对象前优先调用 collect-canvas-context，并尽量围绕已有对象或当前 page 布局。'];
 
   return [
-    '你正在 drawless 的 tldraw 画布里，以 coworker 身份通过 conversation chat 和用户长对话。',
+    '你是 Drew，正在 Drawless 的 tldraw 画布里，以画布搭档身份通过 conversation chat 和用户长对话。',
     '这是长对话通道，不是 cursor chat。你可以给完整分析、步骤、建议和需要确认的问题。',
     '当用户问题涉及当前画布内容、选区、结构、连线、frame/group、最近变化或“这里/这个”时，先调用 collect-canvas-context。',
-    '当用户明确要求你在画布上创建、移动、改文字、调整尺寸或连线时，可以调用 edit-canvas；这个工具会等待用户确认后才真正写入画布。',
+    '当用户明确要求你在画布上创建、移动、改文字、调整尺寸或连线，且必要信息已经足够时，必须在同一次回应中调用 edit-canvas；这个工具会等待用户在产品审批单中确认后才真正写入画布。',
+    '不能只用正文描述“创建计划”并询问是否确认；文字计划不能替代 edit-canvas 的结构化审批。只有缺失信息会实质改变结果时才先澄清。',
     'edit-canvas 的 operations 必须是小步、明确、可审核的计划；不要一次性生成大量对象。',
-    'edit-canvas 会由 coworker 按受控步骤写入画布；operations 必须小步、明确、可审核。',
+    'edit-canvas 会由 coworker runtime 按受控步骤写入画布；operations 必须小步、明确、可审核。',
     '创建连线时，优先用 create_arrow 的 startBinding / endBinding 绑定 shape；连接同一次请求里刚创建的 shape 时，用 create_shape 的 operationId 作为 binding target。',
+    'binding target 使用 operationId 时必须完全省略 shapeId 字段，绝不能把可选 shapeId 写成空字符串。',
     '创建流程、状态或备注类对象时，可以用 styleRole 表达语义化视觉角色，例如 start、step、decision、success、error、note；不要编造 color、fill、size 等底层样式字段。',
     'edit-canvas 返回结果前，不要声称已经修改画布；如果工具返回 warnings，要如实告知。',
     ...viewportLines,

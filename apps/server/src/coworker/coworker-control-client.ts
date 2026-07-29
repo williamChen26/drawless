@@ -1,4 +1,5 @@
 import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
   coworkerConversationToolApprovalRequestSchema,
   coworkerRoomStatusResponseSchema,
   coworkerStopResponseSchema,
@@ -54,7 +55,7 @@ export function createCoworkerControlClient(
   config: DrawlessCoworkerControlConfig
 ): CoworkerControlClient {
   if (!config.baseUrl) {
-    throw new CoworkerControlClientError("Coworker control base url is not configured.", 503);
+    throw new CoworkerControlClientError(`${DRAWLESS_COWORKER_DISPLAY_NAME} 的连接服务尚未配置。`, 503);
   }
 
   return {
@@ -146,7 +147,7 @@ async function sendCoworkerStreamRequest(input: {
     | DrawlessCoworkerConversationToolApprovalRequest;
 }) {
   if (!input.config.baseUrl) {
-    throw new CoworkerControlClientError("Coworker control base url is not configured.", 503);
+    throw new CoworkerControlClientError(`${DRAWLESS_COWORKER_DISPLAY_NAME} 的连接服务尚未配置。`, 503);
   }
 
   const controller = new AbortController();
@@ -161,7 +162,8 @@ async function sendCoworkerStreamRequest(input: {
     if (!response.ok) {
       const payload = await readJson(response);
       throw new CoworkerControlClientError(
-        extractErrorMessage(payload) ?? `Coworker conversation request failed with ${response.status}.`,
+        extractErrorMessage(payload) ??
+          `暂时无法收到 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应（${response.status}）。`,
         response.status
       );
     }
@@ -172,7 +174,7 @@ async function sendCoworkerStreamRequest(input: {
       throw error;
     }
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new CoworkerControlClientError("Coworker conversation request timed out.", 504);
+      throw new CoworkerControlClientError(`等待 ${DRAWLESS_COWORKER_DISPLAY_NAME} 回应超时，请重试。`, 504);
     }
 
     throw new CoworkerControlClientError(
@@ -197,7 +199,7 @@ async function sendCoworkerRequest(input: {
   body?: DrawlessCoworkerStartRequest;
 }) {
   if (!input.config.baseUrl) {
-    throw new CoworkerControlClientError("Coworker control base url is not configured.", 503);
+    throw new CoworkerControlClientError(`${DRAWLESS_COWORKER_DISPLAY_NAME} 的连接服务尚未配置。`, 503);
   }
 
   const controller = new AbortController();
@@ -216,7 +218,8 @@ async function sendCoworkerRequest(input: {
     const payload = await readJson(response);
     if (!response.ok) {
       throw new CoworkerControlClientError(
-        extractErrorMessage(payload) ?? `Coworker control request failed with ${response.status}.`,
+        extractErrorMessage(payload) ??
+          `暂时无法连接 ${DRAWLESS_COWORKER_DISPLAY_NAME}（${response.status}）。`,
         response.status
       );
     }
@@ -227,7 +230,7 @@ async function sendCoworkerRequest(input: {
       throw error;
     }
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new CoworkerControlClientError("Coworker control request timed out.", 504);
+      throw new CoworkerControlClientError(`连接 ${DRAWLESS_COWORKER_DISPLAY_NAME} 超时，请重试。`, 504);
     }
 
     throw new CoworkerControlClientError(

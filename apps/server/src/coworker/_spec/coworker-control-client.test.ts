@@ -33,7 +33,7 @@ describe("coworker control client", () => {
     });
 
     const status = await client.start("alpha", {
-      displayName: "Drawless Coworker",
+      displayName: "Drew",
       waitUntilLoaded: false
     });
 
@@ -43,7 +43,7 @@ describe("coworker control client", () => {
     expect(init).toEqual(expect.objectContaining({ method: "POST" }));
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       serverUrl: "http://127.0.0.1:3001",
-      displayName: "Drawless Coworker",
+      displayName: "Drew",
       waitUntilLoaded: false,
       timeoutMs: 8000,
       sendIntroCursorChat: false

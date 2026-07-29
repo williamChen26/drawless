@@ -1,4 +1,6 @@
-# Coworker 协同画布接入技术方案
+# coworker runtime 协同画布技术方案
+
+> 产品术语边界：本文中的 `coworker`、`conversation`、`sessionId`、`thread`、`run` 等词只描述内部领域、传输、鉴权、模型记忆和并发控制。它们不是用户可见的产品模型。产品定位以 [Drew 产品定位](./coworker-product-positioning.md) 为准：Drew 是持续存在的画布搭档，Room 是共同场所，用户不创建或管理 AI session。
 
 ## 1. 背景
 
@@ -6,20 +8,20 @@ drawless 当前已经有一个清晰的协同基础：
 
 - `apps/web` 负责 Next.js 路由、tldraw 挂载、浏览器身份和协同客户端。
 - `apps/server` 负责健康检查、就绪检查、WebSocket sync 和房间注册表。
-- `packages/shared` 负责跨端类型、schema 和未来 AI 扩展点。
-- `apps/coworker` 是新建的 Mastra 项目，当前已经定义了 `Drawless Coworker` agent，但尚未接入真实协同房间。
+- `packages/shared` 负责跨端类型、schema、身份、conversation、审批和画布操作契约。
+- `apps/coworker` 是 Drew 的 Mastra runtime，已经通过独立 sync client 接入真实协同房间，并提供只读上下文和受控画布编辑工具。
 
-这个方案的目标不是给 tldraw 增加一个普通 AI 聊天框，而是把 coworker 设计成“进入同一个协同 room 的 AI 同事”。
+这个方案的目标不是给 tldraw 增加一个普通 AI 聊天框，而是让 Drew 作为“进入同一个协同 room 的数字同事”参与工作。
 
-用户和 coworker 的关系应该是：
+用户和 Drew 的关系是：
 
 - canvas 是共同工作区。
 - 用户在浏览器中进入某个 tldraw room。
-- coworker 以一个特殊协作者身份进入同一个 room。
-- 用户和 coworker 像两个同事一样共同在 canvas 中工作。
-- 用户和 coworker 可以通过 cursor chat 或 conversation chat 交流。
-- coworker 可以回复用户，也可以在观察画布后主动通过 cursor chat 交流。
-- coworker 可以操作画布，但必须先获得用户明确允许。
+- Drew 由 coworker runtime 以一个特殊协作者身份进入同一个 room。
+- 用户和 Drew 像两个同事一样共同在 canvas 中工作。
+- 用户和 Drew 可以通过 cursor chat 或 conversation chat 交流。
+- Drew 可以回复用户，也可以在观察画布后通过 cursor chat 交流。
+- Drew 可以操作画布，但必须先获得用户明确允许。
 
 核心原则：**tldraw document 始终是唯一画布事实源**。
 
@@ -121,15 +123,48 @@ flowchart TB
 
 ## 4. 职责边界
 
+### 4.0 审批协议边界
+
+审批不是“工作卡”的后端实现。当前采用三层明确分离：
+
+1. `apps/coworker` 产生 Mastra tool call，`runId/toolCallId` 只属于 runtime 控制面。
+2. `apps/server` 在 SSE adapter 中把 runtime 事件转换为公开的 `operationId` 和 `DrawlessCoworkerApprovalRequest`，并用进程内 registry 保存私有映射、房间归属、占用状态和过期时间。
+3. `apps/web` 只使用 `approvalId + capability + proposal` 请求授权，并按 capability 选择展示器；审批单只是该协议的一种 UI 投影。
+
+公开解析接口为 `POST /rooms/:roomId/coworker/approvals/:approvalId/resolve`。Web 不提交也不保存 Mastra `runId/toolCallId`。Server 原子占用审批记录，防止双击或并发重复解析；失败时回滚为可重试，成功后拒绝再次执行。
+
+当前 registry 与 room 一样是进程内、带 TTL 和容量上限的轻量实现。后续需要跨进程恢复或审计时，应替换 registry 存储，而不是把 runtime 标识重新泄漏给 Web。
+
+当前已支持同一 server 进程内的刷新恢复与生命周期审计：
+
+- `GET /rooms/:roomId/coworker/approvals?status=pending` 返回可恢复的公开审批快照；
+- Web 进入 room 时只恢复 pending 能力调用，不伪造用户消息，也不恢复第二份画布状态；
+- registry 记录 requested、resolution-started、resolution-failed 和 resolved 事件；
+- 审计记录只包含公开 approval、决定、时间和受限长度错误，不包含 runtime 私有标识。
+
+这不是跨进程持久化。Server 或 Coworker runtime 重启后，挂起的 Mastra run 本身可能已经不可继续，因此下一阶段必须把“审批存储”和“runtime 可恢复能力”一起设计，不能只把一张审批单写进数据库就宣称可以恢复。
+
+#### 暂缓 TODO：审批一致性与可恢复执行
+
+这一组能力横跨 Web、Server、Coworker runtime 和持久化层，当前先保留为后续专项，不继续扩展本阶段实现：
+
+- 多标签页实时同步同一审批的状态，正确处理其他页面已经允许、拒绝或失效的冲突；
+- 为公开审批解析增加幂等语义和版本约束，明确重复请求、过期快照与并发决定的响应；
+- 设计 runtime 可恢复执行协议，再决定审批与审计记录的持久化方案；不能只持久化 UI 投影，而留下无法恢复的 tool call；
+- 专项设计时需要同时覆盖异常恢复、runtime 重启、Server 重启、跨进程部署和安全清理策略。
+
+在该专项开始前，当前能力边界保持为：同一 server 与 coworker runtime 进程生命周期内支持页面刷新恢复，不承诺跨进程或多标签页实时一致性。
+
 ### 4.1 apps/web
 
-web 继续只负责用户的画布体验：
+web 继续只负责用户的画布体验和 Drew 的协作呈现：
 
 - 解析 room 路由。
 - 生成浏览器设备身份和标签页 session。
 - 使用 `useSync` 连接后端 WebSocket room。
 - 挂载 `<Tldraw />`。
-- 后续可以展示 coworker 的在线状态、聊天入口、操作允许入口或评论，但不在当前阶段做 UI 优化。
+- 展示 Drew 的人物入口、在场状态、沟通入口、结构化审批、协作往来和交付结果。
+- 只保存 conversation 的本地展示状态和公开审批快照，不保存第二份画布结构。
 
 web 不应该：
 
@@ -252,13 +287,13 @@ pnpm smoke:coworker-control
 
 该命令会先构建 coworker，再临时启动 coworker Mastra server 和 drawless server，最后通过 server 的 `/rooms/:roomId/coworker/start|status|stop` 验证 coworker 能经由控制面进入同一个 tldraw sync room。它需要占用本地端口并启动真实进程，因此不放入默认 `pnpm check`。
 
-web 显式控制入口：
+web 控制入口：
 
-- 当前 web 顶部逻辑栏已提供 coworker `状态 / 进入 / 离开` 三个显式动作。
+- 用户通过 Drew 的人物入口允许他加入当前画布；顶部 `状态 / 进入 / 离开` 控件只在 debug 配置下显示。
 - web 只调用 server 的 `/rooms/:roomId/coworker/*` 生命周期入口，不直接调用 coworker Mastra custom API。
-- 当前入口只控制 coworker 是否进入 room，不发送画布摘要给 LLM，也不触发 AI 推理或画布写入。
+- conversation 请求和审批解析同样先经过 server；web 不直接持有 Mastra runId/toolCallId。
 
-## 5. Coworker 的协作者身份
+## 5. Drew 的协作者身份
 
 coworker 应该有自己的协作者身份，而不是复用某个用户 session。
 
@@ -454,7 +489,7 @@ flowchart LR
 }
 ```
 
-## 8. Coworker 聊天和行动模型
+## 8. Drew 的聊天和行动模型
 
 当前阶段先把 AI 介入收敛成一个简单产品模型：coworker 和用户共同在 canvas 里工作，二者通过聊天通道沟通，coworker 只有在用户允许后才操作画布。
 
@@ -1180,12 +1215,12 @@ apps/web/src/
 3. server 不解析原始 WebSocket 包给 LLM。
 4. 画布摘要从 `TLStore` snapshot 和 `store.listen` 的 changes 派生。
 5. coworker 写回画布时通过自己的 `TLStore.put/remove` 触发 sync，不直接改 server storage。
-6. MVP 先做 conversation chat 只读回复，再做常驻观察。
+6. conversation chat、常驻观察和受控画布编辑已经进入当前运行链路。
 7. coworker 需要 Mastra custom API routes 作为 room 生命周期控制面。
 8. web 不直接通知 coworker；由 server 判断 room 生命周期和权限后再调用 coworker 控制面。
 9. server 侧 coworker control 默认关闭，只在显式配置后代理 start/status/stop 请求。
 10. 端到端联调使用显式 smoke 命令，不纳入默认 `pnpm check`。
-11. web 侧当前只提供显式生命周期按钮，不自动唤醒 coworker，也不触发 AI 推理。
+11. web 侧通过 Drew 的人物入口请求加入；生命周期 debug 按钮不属于普通用户信息架构。
 12. cursor chat 是 coworker 的核心现场对话通道，用户和 coworker 都可以通过它交流。
 13. conversation chat 是传统 agent 对话通道，适合长内容、复杂解释和完整确认。
 14. cursor chat 和 conversation chat 都是聊天通道，不是两套不同的 AI 能力。

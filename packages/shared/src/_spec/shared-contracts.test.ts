@@ -7,6 +7,9 @@ import {
   canvasContextSnapshotSchema,
   canvasSemanticGraphSchema,
   canvasSummarySchema,
+  coworkerApprovalListResponseSchema,
+  coworkerApprovalRequestSchema,
+  coworkerApprovalResolutionRequestSchema,
   coworkerConversationToolApprovalRequestSchema,
   coworkerConversationStreamRequestSchema,
   coworkerControlConfigSchema,
@@ -15,6 +18,8 @@ import {
   coworkerStartRequestSchema,
   coworkerStopResponseSchema,
   createDrawlessCoworkerSessionId,
+  DRAWLESS_COWORKER_DISPLAY_NAME,
+  DRAWLESS_COWORKER_ROLE_LABEL,
   parseDrawlessRoomId,
   parseDrawlessCoworkerSessionId,
   parseDrawlessSessionId,
@@ -37,6 +42,9 @@ describe("drawless shared contracts", () => {
   });
 
   it("validates coworker identity and session ids", () => {
+    expect(DRAWLESS_COWORKER_DISPLAY_NAME).toBe("Drew");
+    expect(DRAWLESS_COWORKER_ROLE_LABEL).toBe("画布搭档");
+
     const sessionId = createDrawlessCoworkerSessionId({
       roomId: "alpha",
       instanceId: "instance-1"
@@ -53,7 +61,7 @@ describe("drawless shared contracts", () => {
       coworkerIdentitySchema.parse({
         roomId: "alpha",
         sessionId,
-        displayName: "Drawless Coworker",
+        displayName: DRAWLESS_COWORKER_DISPLAY_NAME,
         color: "#2563eb",
         instanceId: "instance-1"
       })
@@ -91,7 +99,7 @@ describe("drawless shared contracts", () => {
       identity: {
         roomId: "alpha",
         sessionId,
-        displayName: "Drawless Coworker",
+        displayName: DRAWLESS_COWORKER_DISPLAY_NAME,
         color: "#2563eb",
         instanceId: "instance-1"
       },
@@ -144,7 +152,7 @@ describe("drawless shared contracts", () => {
 
     expect(
       serverCoworkerStartRequestSchema.parse({
-        displayName: "Drawless Coworker",
+        displayName: DRAWLESS_COWORKER_DISPLAY_NAME,
         waitUntilLoaded: false,
         sendIntroCursorChat: true
       })
@@ -378,6 +386,34 @@ describe("drawless shared contracts", () => {
     ).toMatchObject({ applied: true });
   });
 
+  it("rejects ambiguous and non-sequential canvas edit references", () => {
+    expect(() =>
+      canvasEditRequestSchema.parse({
+        roomId: "alpha",
+        intent: "错误计划",
+        operations: [
+          {
+            operationId: "same",
+            kind: "create_shape",
+            shapeKind: "rectangle",
+            bounds: { x: 0, y: 0, w: 100, h: 80 }
+          },
+          {
+            operationId: "same",
+            kind: "create_arrow",
+            from: { x: 0, y: 0 },
+            to: { x: 100, y: 100 },
+            startBinding: {
+              shapeId: "shape:1",
+              operationId: "same"
+            },
+            endBinding: { operationId: "future" }
+          }
+        ]
+      })
+    ).toThrow();
+  });
+
   it("validates coworker conversation stream requests", () => {
     const request = coworkerConversationStreamRequestSchema.parse({
       roomId: "alpha",
@@ -405,6 +441,51 @@ describe("drawless shared contracts", () => {
         toolCallId: "call-1"
       })
     ).toEqual({ runId: "run-1", toolCallId: "call-1" });
+
+    expect(
+      coworkerApprovalRequestSchema.parse({
+        id: "11111111-1111-4111-8111-111111111111",
+        roomId: "alpha",
+        capability: "canvas.edit",
+        risk: "write",
+        proposal: { intent: "整理画布" },
+        requestedAt: "2026-07-21T06:00:00.000Z"
+      })
+    ).toMatchObject({ capability: "canvas.edit", risk: "write" });
+    expect(
+      coworkerApprovalResolutionRequestSchema.parse({ decision: "approve" })
+    ).toEqual({ decision: "approve" });
+    expect(
+      coworkerApprovalListResponseSchema.parse({
+        roomId: "alpha",
+        approvals: [
+          {
+            approval: {
+              id: "11111111-1111-4111-8111-111111111111",
+              roomId: "alpha",
+              capability: "canvas.edit",
+              risk: "write",
+              proposal: { intent: "整理画布" },
+              requestedAt: "2026-07-21T06:00:00.000Z"
+            },
+            status: "pending",
+            decision: null,
+            updatedAt: "2026-07-21T06:00:00.000Z",
+            resolvedAt: null,
+            audit: [
+              {
+                kind: "requested",
+                occurredAt: "2026-07-21T06:00:00.000Z",
+                decision: null,
+                message: null
+              }
+            ]
+          }
+        ]
+      })
+    ).toMatchObject({
+      approvals: [{ status: "pending", audit: [{ kind: "requested" }] }]
+    });
   });
 
 });

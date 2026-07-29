@@ -1,75 +1,63 @@
 import type { ReactNode } from "react";
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 
 import type { CoworkerControlState } from "./coworker-control-state";
 
 export type CollaborationStatusView = {
-  /** 顶部栏展示的协同状态名称。 */
+  /** debug 模式顶部栏展示的协同状态名称。 */
   label: string;
   /** 页面分支使用的状态类型。 */
-  state: "connecting" | "online" | "error";
+  state: "connecting" | "online" | "offline" | "error";
   /** 鼠标悬停和错误页展示的状态说明。 */
   detail: string;
-  /** 错误或等待状态下直接展示的原始调试数据。 */
-  raw: unknown;
-};
-
-export type RoomShareState = {
-  /** 当前房间可复制或直接打开的完整 URL；生成失败时为 null。 */
-  url: string | null;
+  /** 仅供 debug 模式查看的协同诊断数据。 */
+  debugValue: unknown;
 };
 
 export function CanvasShellFrame({
   children,
   statusView,
   participantLabel,
-  share,
   coworker
 }: {
   /** 页面主体内容，通常是 tldraw 或连接错误信息。 */
   children: ReactNode;
   /** 从 tldraw sync store 状态转换出的展示状态。 */
   statusView: CollaborationStatusView;
-  /** 当前浏览器参与者的调试标签。 */
+  /** 当前浏览器参与者的 debug 标签。 */
   participantLabel?: string;
-  /** 当前房间的浏览器访问链接。 */
-  share?: RoomShareState;
   /** coworker 生命周期控制状态和显式动作。 */
   coworker?: CoworkerControlState;
 }) {
+  const showDebugUi = process.env.NEXT_PUBLIC_DRAWLESS_DEBUG_UI === "true";
+
   return (
     <main className="canvas-shell" data-testid="canvas-shell">
       <header className="canvas-shell__bar" aria-label="Canvas workspace">
         <div className="canvas-shell__brand">
           <strong>drawless</strong>
         </div>
-        <div className="canvas-shell__toolbar" aria-label="Canvas status">
-          <span
-            className="canvas-shell__pill"
-            data-testid="sync-status"
-            data-state={statusView.state}
-            title={statusView.detail}
-          >
-            {statusView.label}
-          </span>
-          {participantLabel ? (
+        {showDebugUi ? (
+          <div className="canvas-shell__toolbar" aria-label="画布诊断控制">
             <span
-              className="canvas-shell__identity"
-              data-testid="collab-identity"
+              className="canvas-shell__pill"
+              data-testid="sync-status"
+              data-state={statusView.state}
+              title={statusView.detail}
             >
-              {participantLabel}
+              {statusView.label}
             </span>
-          ) : null}
-          {share?.url ? (
-            <a
-              className="canvas-shell__share"
-              data-testid="share-room-button"
-              href={share.url}
-            >
-              房间链接
-            </a>
-          ) : null}
-          {coworker ? <CoworkerControlBar coworker={coworker} /> : null}
-        </div>
+            {participantLabel ? (
+              <span
+                className="canvas-shell__identity"
+                data-testid="collab-identity"
+              >
+                {participantLabel}
+              </span>
+            ) : null}
+            {coworker ? <CoworkerControlBar coworker={coworker} /> : null}
+          </div>
+        ) : null}
       </header>
       <section className="canvas-shell__workspace" aria-label="Infinite canvas">
         {children}
@@ -80,18 +68,39 @@ export function CanvasShellFrame({
 
 export function WorkspaceMessage({
   title,
-  value,
+  detail,
+  debugValue,
+  onRetry,
   role
 }: {
   title: string;
-  value: unknown;
+  detail?: string;
+  debugValue?: unknown;
+  onRetry?: () => void;
   role?: "alert";
 }) {
+  const showDebugUi = process.env.NEXT_PUBLIC_DRAWLESS_DEBUG_UI === "true";
+
   return (
     <div className="canvas-shell__workspace--message" aria-label={title}>
       <div className="canvas-shell__message" role={role}>
         <strong>{title}</strong>
-        <pre>{JSON.stringify(value, null, 2)}</pre>
+        {detail ? <p>{detail}</p> : null}
+        {onRetry ? (
+          <button
+            className="canvas-shell__message-action"
+            onClick={onRetry}
+            type="button"
+          >
+            重新连接
+          </button>
+        ) : null}
+        {showDebugUi && debugValue !== undefined ? (
+          <details>
+            <summary>诊断信息</summary>
+            <pre>{JSON.stringify(debugValue, null, 2)}</pre>
+          </details>
+        ) : null}
       </div>
     </div>
   );
@@ -99,7 +108,10 @@ export function WorkspaceMessage({
 
 function CoworkerControlBar({ coworker }: { coworker: CoworkerControlState }) {
   return (
-    <div className="canvas-shell__coworker" aria-label="Coworker control">
+    <div
+      className="canvas-shell__coworker"
+      aria-label={`${DRAWLESS_COWORKER_DISPLAY_NAME} 调试控制`}
+    >
       <span
         className="canvas-shell__coworker-status"
         data-state={coworker.view.state}

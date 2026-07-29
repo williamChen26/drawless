@@ -18,30 +18,17 @@ export default async function RoomPage({ params }: RoomPageProps) {
           <div className="canvas-shell__brand">
             <strong>drawless</strong>
           </div>
-          <span
-            className="canvas-shell__pill"
-            data-testid="sync-status"
-            data-state="error"
-          >
-            Invalid room
-          </span>
         </header>
         <section
           className="canvas-shell__workspace canvas-shell__workspace--message"
-          aria-label="Invalid room"
+          aria-label="房间链接无效"
         >
           <div className="canvas-shell__message" role="alert">
-            <strong>Room link is not valid.</strong>
-            <pre>
-              {JSON.stringify(
-                {
-                  code: "INVALID_ROOM_ID",
-                  message: decision.reason
-                },
-                null,
-                2
-              )}
-            </pre>
+            <strong>这个房间链接无效</strong>
+            <p>请检查链接是否完整，或创建一个新房间。</p>
+            <a className="canvas-shell__message-action" href="/">
+              创建新房间
+            </a>
           </div>
         </section>
       </main>

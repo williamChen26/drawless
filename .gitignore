@@ -8,3 +8,7 @@ coverage
 *.tsbuildinfo
 playwright-report
 test-results
+.playwright-cli/
+output/playwright/
+apps/coworker/src/mastra/public/*.duckdb
+apps/coworker/src/mastra/public/*.duckdb.wal

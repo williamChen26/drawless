@@ -6,6 +6,7 @@ import type {
   DrawlessServerCoworkerStartRequest
 } from "@drawless/shared";
 import { loadServerConfig } from "../../config.js";
+import { createCoworkerApprovalRegistry } from "../../coworker/coworker-approval-registry.js";
 import type { CoworkerControlClient } from "../../coworker/coworker-control-client.js";
 import { createServerApp } from "../app.js";
 
@@ -48,7 +49,7 @@ describe("server app", () => {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({
       ok: false,
-      error: "Coworker control is disabled."
+      error: "Drew 暂时不可用，请稍后再试。"
     });
 
     await app.close();
@@ -82,6 +83,7 @@ describe("server app", () => {
   });
 
   it("forwards coworker lifecycle requests through the configured client", async () => {
+    const approvalRegistry = createCoworkerApprovalRegistry();
     const calls: Array<{
       method:
         | "start"
@@ -125,29 +127,61 @@ describe("server app", () => {
       },
       streamConversation: async (roomId, request) => {
         calls.push({ method: "streamConversation", roomId, request });
-        return new Response("hello from coworker", {
-          headers: { "content-type": "text/event-stream; charset=utf-8" }
+        return createSseResponse({
+          type: "tool-call-approval",
+          runId: "run-1",
+          payload: {
+            toolCallId: "call-1",
+            toolName: "edit-canvas",
+            args: {
+              roomId: "alpha",
+              intent: "整理流程",
+              operations: [
+                {
+                  operationId: "create-1",
+                  kind: "create_shape",
+                  shapeKind: "rectangle",
+                  text: "开始",
+                  bounds: { x: 0, y: 0, w: 160, h: 80 }
+                }
+              ]
+            }
+          }
         });
       },
       approveConversationToolCall: async (roomId, request) => {
         calls.push({ method: "approveConversationToolCall", roomId, request });
-        return new Response("approved", {
-          headers: { "content-type": "text/event-stream; charset=utf-8" }
+        return createSseResponse({
+          type: "tool-result",
+          runId: request.runId,
+          payload: {
+            toolCallId: request.toolCallId,
+            toolName: "edit-canvas",
+            result: { applied: true }
+          }
         });
       },
       declineConversationToolCall: async (roomId, request) => {
         calls.push({ method: "declineConversationToolCall", roomId, request });
-        return new Response("declined", {
-          headers: { "content-type": "text/event-stream; charset=utf-8" }
-        });
+        return createSseResponse({ type: "finish", runId: request.runId });
       }
     };
+    const declinedApproval = approvalRegistry.register({
+      id: "22222222-2222-4222-8222-222222222222",
+      roomId: "alpha",
+      runId: "run-2",
+      toolCallId: "call-2",
+      capability: "canvas.edit",
+      risk: "write",
+      proposal: { roomId: "alpha", intent: "另一个计划", operations: [] }
+    });
     const { app } = await createServerApp({
       config: loadServerConfig({
         ALLOWED_ORIGINS: "http://127.0.0.1:3000",
         COWORKER_ENABLED: "true"
       }),
-      coworkerClient
+      coworkerClient,
+      coworkerApprovalRegistry: approvalRegistry
     });
 
     const start = await app.inject({
@@ -178,21 +212,90 @@ describe("server app", () => {
     });
     expect(conversation.statusCode).toBe(200);
     expect(conversation.headers["content-type"]).toContain("text/event-stream");
-    expect(conversation.body).toBe("hello from coworker");
+    const publicApprovalEvent = readFirstSseEvent(conversation.body);
+    expect(publicApprovalEvent).not.toHaveProperty("runId");
+    expect(publicApprovalEvent.payload).not.toHaveProperty("toolCallId");
+    expect(publicApprovalEvent).toMatchObject({
+      type: "tool-call-approval",
+      approval: {
+        roomId: "alpha",
+        capability: "canvas.edit",
+        risk: "write"
+      }
+    });
+    const publicApproval = publicApprovalEvent.approval as { id: string };
+
+    const pendingApprovals = await app.inject({
+      method: "GET",
+      url: "/rooms/alpha/coworker/approvals?status=pending"
+    });
+    expect(pendingApprovals.statusCode).toBe(200);
+    expect(pendingApprovals.json()).toMatchObject({
+      roomId: "alpha",
+      approvals: expect.arrayContaining([
+        expect.objectContaining({
+          approval: expect.objectContaining({
+            id: publicApproval.id,
+            capability: "canvas.edit"
+          }),
+          status: "pending",
+          audit: expect.arrayContaining([
+            expect.objectContaining({ kind: "requested" })
+          ])
+        })
+      ])
+    });
+    expect(pendingApprovals.body).not.toContain("run-1");
+    expect(pendingApprovals.body).not.toContain("call-1");
 
     const approve = await app.inject({
       method: "POST",
-      url: "/rooms/alpha/coworker/conversation/run-1/tool-calls/call-1/approve"
+      url: `/rooms/alpha/coworker/approvals/${publicApproval.id}/resolve`,
+      payload: { decision: "approve" }
     });
     expect(approve.statusCode).toBe(200);
-    expect(approve.body).toBe("approved");
+    expect(readFirstSseEvent(approve.body)).toMatchObject({
+      type: "tool-result",
+      operationId: publicApproval.id
+    });
 
     const decline = await app.inject({
       method: "POST",
-      url: "/rooms/alpha/coworker/conversation/run-1/tool-calls/call-1/decline"
+      url: `/rooms/alpha/coworker/approvals/${declinedApproval.id}/resolve`,
+      payload: { decision: "decline" }
     });
     expect(decline.statusCode).toBe(200);
-    expect(decline.body).toBe("declined");
+    expect(readFirstSseEvent(decline.body)).toMatchObject({ type: "finish" });
+
+    const remainingPending = await app.inject({
+      method: "GET",
+      url: "/rooms/alpha/coworker/approvals?status=pending"
+    });
+    expect(remainingPending.json()).toMatchObject({ approvals: [] });
+
+    const approvalAudit = await app.inject({
+      method: "GET",
+      url: "/rooms/alpha/coworker/approvals?status=resolved"
+    });
+    expect(approvalAudit.json()).toMatchObject({
+      approvals: expect.arrayContaining([
+        expect.objectContaining({
+          approval: expect.objectContaining({ id: publicApproval.id }),
+          status: "resolved",
+          decision: "approve",
+          audit: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "resolution-started",
+              decision: "approve"
+            }),
+            expect.objectContaining({
+              kind: "resolved",
+              decision: "approve"
+            })
+          ])
+        })
+      ])
+    });
 
     expect(calls).toEqual([
       {
@@ -216,7 +319,7 @@ describe("server app", () => {
       {
         method: "declineConversationToolCall",
         roomId: "alpha",
-        request: { runId: "run-1", toolCallId: "call-1" }
+        request: { runId: "run-2", toolCallId: "call-2" }
       }
     ]);
 
@@ -255,9 +358,7 @@ describe("server app", () => {
       }),
       streamConversation: async () => {
         calls.push("streamConversation");
-        return new Response("stream", {
-          headers: { "content-type": "text/event-stream; charset=utf-8" }
-        });
+        return createSseResponse({ type: "text-delta", payload: { text: "stream" } });
       },
       approveConversationToolCall: async () => new Response("approved"),
       declineConversationToolCall: async () => new Response("declined")
@@ -277,9 +378,33 @@ describe("server app", () => {
     });
 
     expect(conversation.statusCode).toBe(200);
-    expect(conversation.body).toBe("stream");
+    expect(readFirstSseEvent(conversation.body)).toMatchObject({
+      type: "text-delta",
+      payload: { text: "stream" }
+    });
     expect(calls).toEqual(["status", "start:true:8000", "streamConversation"]);
 
     await app.close();
   });
 });
+
+function createSseResponse(event: unknown) {
+  const type =
+    event && typeof event === "object" && "type" in event &&
+    typeof event.type === "string"
+      ? event.type
+      : "message";
+  return new Response(`event: ${type}\ndata: ${JSON.stringify(event)}\n\n`, {
+    headers: { "content-type": "text/event-stream; charset=utf-8" }
+  });
+}
+
+function readFirstSseEvent(body: string): Record<string, unknown> {
+  const dataLine = body
+    .split(/\r?\n/u)
+    .find((line) => line.startsWith("data:"));
+  if (!dataLine) {
+    throw new Error("Expected an SSE data line.");
+  }
+  return JSON.parse(dataLine.slice(5).trimStart()) as Record<string, unknown>;
+}

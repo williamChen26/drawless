@@ -5,6 +5,12 @@ import type { DrawlessRoomId, DrawlessSessionId } from "./identity.js";
 
 export const COWORKER_SESSION_PREFIX = "coworker:";
 
+/** 数字同事面向用户和协同 presence 展示的稳定姓名。 */
+export const DRAWLESS_COWORKER_DISPLAY_NAME = "Drew";
+
+/** 首次介绍数字同事时使用的角色说明。 */
+export const DRAWLESS_COWORKER_ROLE_LABEL = "画布搭档";
+
 /**
  * coworker 进入协同房间时使用的稳定身份。
  */

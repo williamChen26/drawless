@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "drawless",
-  description: "A lightweight collaborative tldraw workspace."
+  description: "与 Drew 一起梳理想法、推进工作的协作画布。"
 };
 
 export default function RootLayout({

@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react";
-import type { DrawlessServerCoworkerStartRequest } from "@drawless/shared";
+import {
+  DRAWLESS_COWORKER_DISPLAY_NAME,
+  type DrawlessServerCoworkerStartRequest
+} from "@drawless/shared";
 
 import {
   createCoworkerControlClient,
@@ -7,7 +10,7 @@ import {
 } from "@/lib/coworker-control";
 
 export type CoworkerControlView = {
-  /** 顶部栏展示的 coworker 状态。 */
+  /** coworker 状态的人类可读名称。 */
   label: string;
   /** 当前 coworker 控制状态类型。 */
   state: "idle" | "loading" | "online" | "offline" | "disabled" | "error";
@@ -35,16 +38,16 @@ export type CoworkerControlState = {
 type CoworkerControlAction = "status" | "start" | "stop";
 
 /**
- * 把顶部栏、入场弹窗和后续调试按钮统一接到同一套 coworker 控制面。
+ * 把 Drew 的画布入口和 debug 控制统一接到同一套 coworker 控制面。
  *
  * 这里不直接连接 coworker 服务，而是永远经过 drawless server；
  * server 负责开关、baseUrl、超时和跨端契约校验，web 只保留用户意图。
  */
 export function useCoworkerControl(roomId: string): CoworkerControlState {
   const [view, setView] = useState<CoworkerControlView>({
-    label: "Coworker idle",
+    label: `${DRAWLESS_COWORKER_DISPLAY_NAME} 未连接`,
     state: "idle",
-    detail: "Coworker control has not been queried.",
+    detail: `尚未查询 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的连接状态。`,
     busy: false,
     raw: null
   });
@@ -63,12 +66,15 @@ export function useCoworkerControl(roomId: string): CoworkerControlState {
     action: CoworkerControlAction,
     startRequest?: DrawlessServerCoworkerStartRequest
   ): Promise<CoworkerControlView> => {
-    // 所有动作先进入 loading 态，避免弹窗和顶部栏同时触发时出现两个并发 UI 状态。
+    // 所有动作先进入 loading 态，避免多个入口同时触发时出现两个并发 UI 状态。
     setView((current) => ({
       ...current,
-      label: action === "start" ? "Coworker entering" : "Coworker checking",
+      label:
+        action === "start"
+          ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 正在加入`
+          : `正在查询 ${DRAWLESS_COWORKER_DISPLAY_NAME}`,
       state: "loading",
-      detail: "Calling drawless server coworker control route.",
+      detail: "正在调用 drawless server 的 coworker 控制接口。",
       busy: true
     }));
 
@@ -90,7 +96,7 @@ export function useCoworkerControl(roomId: string): CoworkerControlState {
           ? createCoworkerSuccessView(result.value, action)
           : createCoworkerErrorView(result.error);
         if (!result.ok) {
-          // Result 风格的业务错误已经带有 code/message，统一转成顶部栏可读状态。
+          // Result 风格的业务错误已经带有 code/message，统一转成界面可读状态。
           setView(nextView);
           return nextView;
         }
@@ -131,7 +137,10 @@ function createCoworkerSuccessView(
   ) {
     const status = value.status;
     return {
-      label: status === "online" ? "Coworker online" : `Coworker ${status}`,
+      label:
+        status === "online"
+          ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 已加入`
+          : `${DRAWLESS_COWORKER_DISPLAY_NAME} · ${status}`,
       state:
         status === "online"
           ? "online"
@@ -140,17 +149,17 @@ function createCoworkerSuccessView(
             : "offline",
       detail:
         action === "start"
-          ? "Coworker entered the room through drawless server."
-          : "Coworker lifecycle status returned by drawless server.",
+          ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 已通过 drawless server 进入 room。`
+          : `drawless server 返回了 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的生命周期状态。`,
       busy: false,
       raw: value
     };
   }
 
   return {
-    label: "Coworker updated",
+    label: `${DRAWLESS_COWORKER_DISPLAY_NAME} 状态已更新`,
     state: "offline",
-    detail: "Coworker control returned a response.",
+    detail: "coworker 控制接口已返回响应。",
     busy: false,
     raw: value
   };
@@ -160,9 +169,13 @@ function createCoworkerErrorView(
   error: CoworkerControlError
 ): CoworkerControlView {
   // disabled 是部署配置状态，不应展示成普通失败，方便本地开发时判断是否没开 COWORKER_ENABLED。
-  const disabled = error.message.toLowerCase().includes("disabled");
+  const disabled =
+    error.message.toLowerCase().includes("disabled") ||
+    error.message.includes("暂时不可用");
   return {
-    label: disabled ? "Coworker disabled" : "Coworker error",
+    label: disabled
+      ? `${DRAWLESS_COWORKER_DISPLAY_NAME} 暂时不可用`
+      : `${DRAWLESS_COWORKER_DISPLAY_NAME} 连接异常`,
     state: disabled ? "disabled" : "error",
     detail: error.message,
     busy: false,

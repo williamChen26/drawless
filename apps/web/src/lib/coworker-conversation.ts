@@ -1,26 +1,32 @@
 import {
-  coworkerConversationToolApprovalRequestSchema,
+  DRAWLESS_COWORKER_DISPLAY_NAME,
+  coworkerApprovalIdSchema,
+  coworkerApprovalListResponseSchema,
+  coworkerApprovalResolutionRequestSchema,
   coworkerConversationStreamRequestSchema,
   parseDrawlessRoomId,
   type DrawlessCanvasViewportContext,
-  type DrawlessCoworkerConversationToolApprovalRequest,
+  type DrawlessCoworkerApprovalSnapshot,
   type DrawlessCoworkerConversationStreamRequest
 } from "@drawless/shared";
 
 import { resolveCoworkerControlServerUrl } from "./coworker-control";
 
 export type CoworkerConversationStreamError = {
-  /** 错误类型，用于浮窗展示和测试判断。 */
+  /** 错误类型，用于界面分支和测试判断。 */
   code:
     | "INVALID_SERVER_URL"
     | "INVALID_ROOM_ID"
     | "INVALID_REQUEST"
+    | "INVALID_RESPONSE"
     | "HTTP_ERROR"
     | "MISSING_STREAM";
-  /** 给开发阶段直接展示的人类可读错误。 */
+  /** 可直接转换为用户提示的人类可读错误。 */
   message: string;
   /** 原始错误或响应内容，便于排查链路问题。 */
   raw: unknown;
+  /** HTTP 请求失败时的状态码；本地校验错误为空。 */
+  status?: number | undefined;
 };
 
 export type CoworkerConversationStreamResult =
@@ -36,6 +42,109 @@ export type CoworkerConversationStreamResult =
       /** 流式请求错误。 */
       error: CoworkerConversationStreamError;
     };
+
+export type CoworkerApprovalRecoveryResult =
+  | {
+      /** 待恢复审批是否读取成功。 */
+      ok: true;
+      /** 当前 room 中仍可由用户处理的审批快照。 */
+      approvals: DrawlessCoworkerApprovalSnapshot[];
+    }
+  | {
+      /** 待恢复审批是否读取成功。 */
+      ok: false;
+      /** 读取失败的结构化错误。 */
+      error: CoworkerConversationStreamError;
+    };
+
+type LoadCoworkerApprovalsInput = {
+  /** 当前协同房间 ID。 */
+  roomId: string;
+  /** drawless server 的 HTTP 或 WebSocket 基础地址。 */
+  serverUrl?: string | null | undefined;
+  /** 测试时可注入的 fetch 实现。 */
+  fetcher?: typeof fetch;
+  /** 切换房间或卸载时用于中断恢复请求。 */
+  signal?: AbortSignal;
+};
+
+export function loadCoworkerPendingApprovals(
+  input: LoadCoworkerApprovalsInput
+) {
+  return loadCoworkerApprovals({ ...input, status: "pending" });
+}
+
+export async function loadCoworkerApprovals(
+  input: LoadCoworkerApprovalsInput & {
+    /** 只读取指定状态；省略时读取仍在 registry 中的全部审批。 */
+    status?: "pending" | "resolving" | "resolved" | undefined;
+  }
+): Promise<CoworkerApprovalRecoveryResult> {
+  const roomId = parseDrawlessRoomId(input.roomId);
+  if (!roomId.ok) {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_ROOM_ID",
+        message: roomId.reason,
+        raw: input.roomId
+      }
+    };
+  }
+
+  const serverUrl = resolveCoworkerControlServerUrl(input.serverUrl);
+  if (!serverUrl.ok) {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_SERVER_URL",
+        message: serverUrl.error.message,
+        raw: serverUrl.error.raw
+      }
+    };
+  }
+
+  const requestInit: RequestInit = { method: "GET" };
+  if (input.signal) {
+    requestInit.signal = input.signal;
+  }
+  const response = await resolveFetcher(input.fetcher)(
+    createCoworkerApprovalListUrl({
+      baseUrl: serverUrl.value,
+      roomId: roomId.value,
+      status: input.status
+    }),
+    requestInit
+  );
+  const raw = await readResponseBody(response);
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: {
+        code: "HTTP_ERROR",
+        message:
+          extractErrorMessage(raw) ??
+          `无法读取 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的审批记录（${response.status}）。`,
+        raw,
+        status: response.status
+      }
+    };
+  }
+
+  const result = coworkerApprovalListResponseSchema.safeParse(raw);
+  if (!result.success) {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_RESPONSE",
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 的审批记录返回了无法识别的数据。`,
+        raw
+      }
+    };
+  }
+
+  return { ok: true, approvals: result.data.approvals };
+}
 
 export async function createCoworkerConversationStream(input: {
   /** 当前协同房间 ID。 */
@@ -117,8 +226,11 @@ export async function createCoworkerConversationStream(input: {
       ok: false,
       error: {
         code: "HTTP_ERROR",
-        message: extractErrorMessage(raw) ?? `Coworker conversation returned ${response.status}.`,
-        raw
+        message:
+          extractErrorMessage(raw) ??
+          `暂时无法收到 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应（${response.status}）。`,
+        raw,
+        status: response.status
       }
     };
   }
@@ -128,7 +240,7 @@ export async function createCoworkerConversationStream(input: {
       ok: false,
       error: {
         code: "MISSING_STREAM",
-        message: "Coworker conversation stream is empty.",
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 这次没有返回内容，请稍后再试。`,
         raw: response
       }
     };
@@ -137,13 +249,11 @@ export async function createCoworkerConversationStream(input: {
   return { ok: true, stream: response.body };
 }
 
-export async function createCoworkerConversationToolApprovalStream(input: {
+export async function createCoworkerApprovalResolutionStream(input: {
   /** 当前协同房间 ID。 */
   roomId: string;
-  /** Mastra 当前 agent stream 的 run ID。 */
-  runId: string;
-  /** 等待用户确认或拒绝的 tool call ID。 */
-  toolCallId: string;
+  /** Server 生成的公开审批 ID。 */
+  approvalId: string;
   /** 用户对 tool call 的决定。 */
   decision: "approve" | "decline";
   /** drawless server 的 HTTP 或 WebSocket 基础地址。 */
@@ -165,21 +275,15 @@ export async function createCoworkerConversationToolApprovalStream(input: {
     };
   }
 
-  const request = coworkerConversationToolApprovalRequestSchema.safeParse({
-    runId: input.runId,
-    toolCallId: input.toolCallId
+  const approvalId = coworkerApprovalIdSchema.safeParse(input.approvalId);
+  if (!approvalId.success) {
+    return createInvalidApprovalStreamResult(approvalId.error);
+  }
+  const resolution = coworkerApprovalResolutionRequestSchema.safeParse({
+    decision: input.decision
   });
-  if (!request.success) {
-    return {
-      ok: false,
-      error: {
-        code: "INVALID_REQUEST",
-        message:
-          request.error.issues[0]?.message ??
-          "Invalid coworker conversation approval request.",
-        raw: request.error
-      }
-    };
+  if (!resolution.success) {
+    return createInvalidApprovalStreamResult(resolution.error);
   }
 
   const serverUrl = resolveCoworkerControlServerUrl(input.serverUrl);
@@ -198,17 +302,16 @@ export async function createCoworkerConversationToolApprovalStream(input: {
   const requestInit: RequestInit = {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(request.data)
+    body: JSON.stringify(resolution.data)
   };
   if (input.signal) {
     requestInit.signal = input.signal;
   }
 
-  const response = await fetcher(createCoworkerConversationToolApprovalStreamUrl({
+  const response = await fetcher(createCoworkerApprovalResolutionStreamUrl({
     baseUrl: serverUrl.value,
     roomId: roomId.value,
-    request: request.data,
-    decision: input.decision
+    approvalId: approvalId.data
   }), requestInit);
   if (!response.ok) {
     const raw = await readResponseBody(response);
@@ -216,8 +319,11 @@ export async function createCoworkerConversationToolApprovalStream(input: {
       ok: false,
       error: {
         code: "HTTP_ERROR",
-        message: extractErrorMessage(raw) ?? `Coworker conversation returned ${response.status}.`,
-        raw
+        message:
+          extractErrorMessage(raw) ??
+          `暂时无法继续 ${DRAWLESS_COWORKER_DISPLAY_NAME} 的回应（${response.status}）。`,
+        raw,
+        status: response.status
       }
     };
   }
@@ -227,13 +333,28 @@ export async function createCoworkerConversationToolApprovalStream(input: {
       ok: false,
       error: {
         code: "MISSING_STREAM",
-        message: "Coworker conversation stream is empty.",
+        message: `${DRAWLESS_COWORKER_DISPLAY_NAME} 这次没有返回内容，请稍后再试。`,
         raw: response
       }
     };
   }
 
   return { ok: true, stream: response.body };
+}
+
+function createInvalidApprovalStreamResult(
+  error: { issues: readonly { message?: string | undefined }[] }
+): CoworkerConversationStreamResult {
+  return {
+    ok: false,
+    error: {
+      code: "INVALID_REQUEST",
+      message:
+        error.issues[0]?.message ??
+        "Invalid coworker conversation approval request.",
+      raw: error
+    }
+  };
 }
 
 export async function readCoworkerConversationEventStream(
@@ -277,15 +398,13 @@ function createCoworkerConversationStreamUrl(input: {
   return url.toString();
 }
 
-function createCoworkerConversationToolApprovalStreamUrl(input: {
+function createCoworkerApprovalListUrl(input: {
   /** drawless server 的 HTTP 基础地址。 */
   baseUrl: string;
   /** 当前协同房间 ID。 */
   roomId: string;
-  /** 已通过 shared schema 校验的 approval 请求。 */
-  request: DrawlessCoworkerConversationToolApprovalRequest;
-  /** 用户对 tool call 的决定。 */
-  decision: "approve" | "decline";
+  /** 要读取的审批生命周期状态；省略时读取全部。 */
+  status?: "pending" | "resolving" | "resolved" | undefined;
 }) {
   const url = new URL(input.baseUrl);
   url.pathname = joinUrlPath(
@@ -293,11 +412,31 @@ function createCoworkerConversationToolApprovalStreamUrl(input: {
     "rooms",
     encodeURIComponent(input.roomId),
     "coworker",
-    "conversation",
-    encodeURIComponent(input.request.runId),
-    "tool-calls",
-    encodeURIComponent(input.request.toolCallId),
-    input.decision
+    "approvals"
+  );
+  if (input.status) {
+    url.searchParams.set("status", input.status);
+  }
+  return url.toString();
+}
+
+function createCoworkerApprovalResolutionStreamUrl(input: {
+  /** drawless server 的 HTTP 基础地址。 */
+  baseUrl: string;
+  /** 当前协同房间 ID。 */
+  roomId: string;
+  /** 已通过 shared schema 校验的公开审批 ID。 */
+  approvalId: string;
+}) {
+  const url = new URL(input.baseUrl);
+  url.pathname = joinUrlPath(
+    url.pathname,
+    "rooms",
+    encodeURIComponent(input.roomId),
+    "coworker",
+    "approvals",
+    encodeURIComponent(input.approvalId),
+    "resolve"
   );
   return url.toString();
 }

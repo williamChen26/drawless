@@ -1,5 +1,4 @@
 export * from "./components/button";
-export * from "./components/dialog";
-export * from "./components/input";
+export * from "./components/liquid-glass";
 export * from "./components/textarea";
 export * from "./lib/utils";

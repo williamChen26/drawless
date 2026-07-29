@@ -14,6 +14,7 @@
     "@drawless/shared": "workspace:*",
     "@drawless/ui": "workspace:*",
     "@tldraw/sync": "5.0.1",
+    "motion": "^12.42.2",
     "next": "^15.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
