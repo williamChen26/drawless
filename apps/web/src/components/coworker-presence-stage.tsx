@@ -14,6 +14,7 @@ import {
   type CoworkerCanvasTargetResolver
 } from "../lib/coworker-presence-content";
 import type { CoworkerPresencePhase } from "../lib/coworker-presence-state";
+import type { CoworkerPromptPresetMode } from "../lib/coworker-prompt-presets";
 import type { CoworkerConversationTurn } from "../lib/use-coworker-conversation";
 import {
   resolveCoworkerPrimaryArtifact,
@@ -31,6 +32,7 @@ import { CoworkerDeliveryPreview } from "./coworker-delivery-preview";
 import { CoworkerDialogueNote } from "./coworker-dialogue-note";
 import { LiquidGlassBubble } from "./liquid-glass-bubble";
 import { CoworkerGlassHandoff } from "./coworker-glass-handoff";
+import { CoworkerPromptArrival } from "./coworker-prompt-arrival";
 import {
   CoworkerResultNote,
   type CoworkerResultNotePhase
@@ -75,6 +77,8 @@ export type CoworkerPresenceStageProps = {
   resolveCanvasTarget?: CoworkerCanvasTargetResolver | undefined;
   /** 当前尚未发送的用户草稿。 */
   message: string;
+  /** 根据当前 tldraw document 是否为空选择入场起手句。 */
+  promptPresetMode: CoworkerPromptPresetMode;
   /** 当前任务是否阻止再次发送。 */
   sendDisabled: boolean;
   /** tldraw 是否与当前协作房间保持在线同步。 */
@@ -115,6 +119,10 @@ export type CoworkerPresenceStageProps = {
   onMessageChange: (message: string) => void;
   /** 提交当前草稿。 */
   onSend: () => Promise<void>;
+  /** 点击入场起手句后直接提交对应要求。 */
+  onInvokePrompt: (message: string) => Promise<void>;
+  /** 收起 Drew 主动递出的入场起手句。 */
+  onDismissPrompts: () => void;
   /** 显式停止接收当前回复。 */
   onCancel: () => void;
   /** 请求 coworker 加入当前画布。 */
@@ -154,6 +162,7 @@ export function CoworkerPresenceStage({
   resultWarnings,
   resolveCanvasTarget,
   message,
+  promptPresetMode,
   sendDisabled,
   syncOnline = true,
   canCancel,
@@ -173,6 +182,8 @@ export function CoworkerPresenceStage({
   onComposerFocusChange,
   onMessageChange,
   onSend,
+  onInvokePrompt,
+  onDismissPrompts,
   onCancel,
   onJoin,
   onResolveApproval,
@@ -242,6 +253,15 @@ export function CoworkerPresenceStage({
       </div>
 
       <div className="coworker-presence-stage__exchange" id={workspaceId}>
+        {online && surface.kind === "prompts" ? (
+          <CoworkerPromptArrival
+            disabled={sendDisabled}
+            mode={promptPresetMode}
+            onDismiss={onDismissPrompts}
+            onInvoke={onInvokePrompt}
+          />
+        ) : null}
+
         {artifact.kind === "handoff" ? (
           <CoworkerGlassHandoff
             key={handoff?.id}

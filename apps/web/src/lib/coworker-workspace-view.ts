@@ -12,12 +12,14 @@ export type CoworkerComposerPurpose =
 export type CoworkerWorkspaceSurface =
   | { kind: "closed" }
   | { kind: "current" }
+  | { kind: "prompts" }
   | { kind: "composer"; purpose: CoworkerComposerPurpose }
   | { kind: "delivery" }
   | { kind: "activity" };
 
 export type CoworkerWorkspaceAction =
   | { type: "show-current" }
+  | { type: "show-prompts" }
   | { type: "open-composer"; purpose?: CoworkerComposerPurpose }
   | { type: "show-delivery" }
   | { type: "show-activity" }
@@ -58,6 +60,9 @@ export function reduceCoworkerWorkspaceSurface(
   if (action.type === "show-current") {
     return { kind: "current" };
   }
+  if (action.type === "show-prompts") {
+    return { kind: "prompts" };
+  }
   if (action.type === "open-composer") {
     return { kind: "composer", purpose: action.purpose ?? "open" };
   }
@@ -85,7 +90,10 @@ export function resolveCoworkerPrimaryArtifact(input: {
   if (input.surface.kind === "closed" || input.surface.kind === "activity") {
     return { kind: "none" };
   }
-  if (input.surface.kind === "composer") {
+  if (
+    input.surface.kind === "composer" ||
+    input.surface.kind === "prompts"
+  ) {
     return { kind: "none" };
   }
   if (input.hasPendingApproval) {

@@ -30,6 +30,11 @@ describe("coworker workspace view", () => {
     expect(surface).toEqual({ kind: "composer", purpose: "open" });
 
     surface = reduceCoworkerWorkspaceSurface(surface, {
+      type: "show-prompts"
+    });
+    expect(surface).toEqual({ kind: "prompts" });
+
+    surface = reduceCoworkerWorkspaceSurface(surface, {
       type: "show-activity"
     });
     expect(surface).toEqual({ kind: "activity" });
@@ -62,6 +67,19 @@ describe("coworker workspace view", () => {
         hasText: true,
         hasCanvasResult: false,
         surface: { kind: "composer", purpose: "plan-adjustment" }
+      })
+    ).toEqual({ kind: "none" });
+  });
+
+  it("lets the prompt arrival take focus without exposing an old artifact", () => {
+    expect(
+      resolveCoworkerPrimaryArtifact({
+        phase: "completed",
+        hasHandoff: false,
+        hasPendingApproval: false,
+        hasText: true,
+        hasCanvasResult: true,
+        surface: { kind: "prompts" }
       })
     ).toEqual({ kind: "none" });
   });

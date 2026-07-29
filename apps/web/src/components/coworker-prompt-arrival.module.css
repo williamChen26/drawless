@@ -1,0 +1,363 @@
+.root {
+  position: relative;
+  display: grid;
+  width: min(390px, 100%);
+  min-width: 0;
+  gap: 8px;
+  color: #18304f;
+  contain: layout style;
+  pointer-events: auto;
+  animation: promptArrivalRoot 440ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.header,
+.footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline: 6px 2px;
+}
+
+.header p {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+  margin: 0;
+  color: #687894;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.header strong {
+  color: #18304f;
+  font-size: 12px;
+}
+
+.dismiss {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  outline: none;
+  background: transparent;
+  color: #687894;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    color 140ms cubic-bezier(0.25, 1, 0.5, 1),
+    transform 140ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.dismiss:focus-visible {
+  outline: 2px solid #2868d8;
+  outline-offset: 2px;
+}
+
+.dismiss:active {
+  transform: translateY(1px);
+}
+
+.dismiss:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.prompts {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.prompt {
+  --prompt-delay: calc(var(--prompt-index, 0) * 55ms);
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  justify-items: start;
+  gap: 2px;
+  border-radius: 22px 25px 24px 16px;
+  outline: none;
+  color: #18304f;
+  padding: 9px 15px 10px;
+  text-align: left;
+  transform-origin: 0 50%;
+  cursor: pointer;
+  animation: promptDropletPull 440ms cubic-bezier(0.16, 1, 0.3, 1)
+    var(--prompt-delay) both;
+  transition:
+    color 150ms cubic-bezier(0.25, 1, 0.5, 1),
+    filter 150ms cubic-bezier(0.25, 1, 0.5, 1),
+    transform 150ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.root[data-paged="true"] .prompt {
+  animation-duration: 230ms;
+  animation-delay: calc(var(--prompt-index, 0) * 34ms);
+}
+
+.prompt:nth-child(2) {
+  width: calc(100% - 18px);
+  margin-inline-start: 18px;
+  border-radius: 25px 18px 24px 22px;
+}
+
+.prompt:nth-child(3) {
+  width: calc(100% - 7px);
+  margin-inline-start: 7px;
+  border-radius: 20px 25px 17px 25px;
+}
+
+.prompt strong {
+  color: currentcolor;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.015em;
+  line-height: 1.35;
+}
+
+.prompt > span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #596b87;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.prompt:focus-visible {
+  outline: 2px solid #2868d8;
+  outline-offset: 3px;
+}
+
+.prompt:active:not(:disabled) {
+  transform: translateX(-2px) scale(0.985);
+}
+
+.prompt:disabled {
+  cursor: default;
+}
+
+.root[data-disabled="true"] .prompt {
+  opacity: 0.58;
+}
+
+.root[data-selecting="true"] .prompt[data-selected="false"] {
+  opacity: 0;
+  transform: translate3d(10px, 0, 0) scale(0.96);
+}
+
+.root[data-selecting="true"] .prompt[data-selected="true"] {
+  animation: promptDropletAbsorb 150ms cubic-bezier(0.7, 0, 0.84, 0) both;
+}
+
+.footer {
+  min-height: 32px;
+  color: #71809a;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.pages {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.pages button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  outline: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.pages button > span {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border: 1px solid rgb(49 83 132 / 20%);
+  border-radius: 50%;
+  background: rgb(111 133 169 / 32%);
+  transition:
+    background-color 150ms cubic-bezier(0.25, 1, 0.5, 1),
+    transform 150ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.pages button[aria-pressed="true"] > span {
+  background: #2868d8;
+  transform: scale(1.35);
+}
+
+.pages button:focus-visible {
+  outline: 2px solid #2868d8;
+  outline-offset: -2px;
+}
+
+.pages button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+@media (hover: hover) {
+  .dismiss:hover:not(:disabled) {
+    color: #2868d8;
+    transform: translateY(-1px);
+  }
+
+  .prompt:hover:not(:disabled) {
+    color: #2059bd;
+    filter: brightness(1.025);
+    transform: translateX(3px);
+  }
+
+  .pages button:hover:not(:disabled) > span {
+    background: rgb(40 104 216 / 64%);
+    transform: scale(1.2);
+  }
+}
+
+@media (pointer: coarse) {
+  .dismiss {
+    min-height: 44px;
+  }
+
+  .pages button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 700px) {
+  .root {
+    width: 100%;
+  }
+
+  .header {
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .header p {
+    display: grid;
+    gap: 0;
+  }
+
+  .prompt {
+    min-height: 60px;
+    padding-inline: 12px;
+  }
+
+  .prompt:nth-child(2) {
+    width: calc(100% - 8px);
+    margin-inline-start: 8px;
+  }
+
+  .prompt:nth-child(3) {
+    width: calc(100% - 3px);
+    margin-inline-start: 3px;
+  }
+
+  .prompt > span {
+    -webkit-line-clamp: 3;
+  }
+
+  .footer {
+    align-items: center;
+    padding-inline-start: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root,
+  .prompt,
+  .root[data-paged="true"] .prompt,
+  .root[data-selecting="true"] .prompt[data-selected="true"] {
+    animation: none;
+  }
+
+  .dismiss,
+  .prompt,
+  .pages button > span {
+    transition-duration: 0.01ms;
+  }
+}
+
+@media (forced-colors: active) {
+  .dismiss,
+  .prompt,
+  .pages button {
+    forced-color-adjust: auto;
+  }
+
+  .prompt {
+    border: 1px solid ButtonText;
+  }
+
+  .pages button > span {
+    border-color: ButtonText;
+    background: Canvas;
+  }
+
+  .pages button[aria-pressed="true"] > span {
+    background: Highlight;
+  }
+}
+
+@keyframes promptArrivalRoot {
+  from {
+    opacity: 0;
+    transform: translate3d(-12px, 5px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes promptDropletPull {
+  from {
+    opacity: 0;
+    transform: translate3d(-26px, 0, 0) scaleX(0.28) scaleY(0.74);
+  }
+
+  34% {
+    opacity: 0.82;
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scaleX(1) scaleY(1);
+  }
+}
+
+@keyframes promptDropletAbsorb {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(-46px, 0, 0) scaleX(0.22) scaleY(0.58);
+  }
+}

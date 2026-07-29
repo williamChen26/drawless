@@ -145,6 +145,9 @@ function SyncedCanvasShell({
         />
         <CoworkerConversationWindow
           coworker={coworker}
+          hasCanvasContent={() =>
+            Boolean(editorRef.current?.getCurrentPageShapes().length)
+          }
           roomId={collaboration.roomId}
           syncOnline={statusView.state === "online"}
           getCanvasViewport={() => createCanvasViewportContext(editorRef.current)}

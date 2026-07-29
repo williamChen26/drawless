@@ -262,8 +262,8 @@ export function useCoworkerConversation(input: {
     return "done";
   };
 
-  const sendMessage = async () => {
-    const nextMessage = message.trim();
+  const sendMessage = async (messageOverride?: string) => {
+    const nextMessage = (messageOverride ?? message).trim();
     if (!nextMessage || busy) {
       return;
     }

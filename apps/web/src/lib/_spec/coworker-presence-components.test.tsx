@@ -9,6 +9,7 @@ import { CoworkerGlassHandoff } from "../../components/coworker-glass-handoff";
 import {
   CoworkerPresenceStage
 } from "../../components/coworker-presence-stage";
+import { CoworkerPromptArrival } from "../../components/coworker-prompt-arrival";
 import { CoworkerResultNote } from "../../components/coworker-result-note";
 import { splitSemanticParagraphs } from "../coworker-presence-content";
 
@@ -160,6 +161,24 @@ describe("coworker presence components", () => {
     expect(html).not.toContain("foldMark");
   });
 
+  it("lets Drew actively offer three canvas abilities outside the composer", () => {
+    const html = renderToStaticMarkup(
+      <CoworkerPromptArrival
+        disabled={false}
+        mode="canvas-context"
+        onDismiss={vi.fn()}
+        onInvoke={vi.fn()}
+      />
+    );
+
+    expect(html).toContain("想先和你一起试试");
+    expect(html).toContain("看懂这块画布");
+    expect(html).toContain("理顺选中的步骤");
+    expect(html).toContain("找到下一步");
+    expect(html.match(/drawless-liquid-glass--control/g)).toHaveLength(3);
+    expect(html).not.toContain("coworker-composer");
+  });
+
   it("renders the offline entry as a reusable liquid-glass confirmation bubble", () => {
     const html = renderToStaticMarkup(
       <CoworkerPresenceStage
@@ -176,12 +195,15 @@ describe("coworker presence components", () => {
         latestUserText={null}
         lifecycleState="idle"
         message=""
+        promptPresetMode="empty-canvas"
         onAvatarFocusChange={vi.fn()}
         onAvatarHoverChange={vi.fn()}
         onCancel={vi.fn()}
         onCloseActivity={vi.fn()}
         onCloseSurface={vi.fn()}
         onComposerFocusChange={vi.fn()}
+        onDismissPrompts={vi.fn()}
+        onInvokePrompt={vi.fn()}
         onJoin={vi.fn()}
         onMessageChange={vi.fn()}
         onOpenComposer={vi.fn()}
@@ -231,12 +253,15 @@ describe("coworker presence components", () => {
         latestUserText="整理当前流程"
         lifecycleState="online"
         message=""
+        promptPresetMode="canvas-context"
         onAvatarFocusChange={vi.fn()}
         onAvatarHoverChange={vi.fn()}
         onCancel={vi.fn()}
         onCloseActivity={vi.fn()}
         onCloseSurface={vi.fn()}
         onComposerFocusChange={vi.fn()}
+        onDismissPrompts={vi.fn()}
+        onInvokePrompt={vi.fn()}
         onJoin={vi.fn()}
         onMessageChange={vi.fn()}
         onOpenComposer={vi.fn()}
@@ -290,12 +315,15 @@ describe("coworker presence components", () => {
         latestUserText="整理流程"
         lifecycleState="online"
         message=""
+        promptPresetMode="canvas-context"
         onAvatarFocusChange={vi.fn()}
         onAvatarHoverChange={vi.fn()}
         onCancel={vi.fn()}
         onCloseActivity={vi.fn()}
         onCloseSurface={vi.fn()}
         onComposerFocusChange={vi.fn()}
+        onDismissPrompts={vi.fn()}
+        onInvokePrompt={vi.fn()}
         onJoin={vi.fn()}
         onMessageChange={vi.fn()}
         onOpenComposer={vi.fn()}

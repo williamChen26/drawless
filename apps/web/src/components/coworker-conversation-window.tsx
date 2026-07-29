@@ -8,6 +8,7 @@ import { resolveCoworkerAvatarMode } from "@/lib/coworker-avatar-state";
 import { getLatestCanvasEditResult } from "@/lib/coworker-presence-content";
 import type { CoworkerCanvasTargetResolver } from "@/lib/coworker-presence-content";
 import { resolveCoworkerPresenceView } from "@/lib/coworker-presence-state";
+import type { CoworkerPromptPresetMode } from "@/lib/coworker-prompt-presets";
 import { useCoworkerConversation } from "@/lib/use-coworker-conversation";
 import {
   createInitialCoworkerWorkspaceSurface,
@@ -35,6 +36,7 @@ export function CoworkerConversationWindow({
   roomId,
   coworker,
   syncOnline,
+  hasCanvasContent,
   getCanvasViewport,
   resolveCanvasTarget,
   onLocateResult
@@ -45,6 +47,8 @@ export function CoworkerConversationWindow({
   coworker: CoworkerControlState;
   /** tldraw 是否与当前协作房间保持在线同步。 */
   syncOnline: boolean;
+  /** 从当前 tldraw document 即时判断是否至少存在一个 shape。 */
+  hasCanvasContent?: (() => boolean) | undefined;
   /** 发送消息时读取用户当前画布可视区。 */
   getCanvasViewport?: () => DrawlessCanvasViewportContext | null;
   /** 从当前 tldraw document 即时读取审批所引用的对象。 */
@@ -65,9 +69,12 @@ export function CoworkerConversationWindow({
     id: number;
     text: string;
   } | null>(null);
+  const [promptPresetMode, setPromptPresetMode] =
+    useState<CoworkerPromptPresetMode>("empty-canvas");
   const handoffSequenceRef = useRef(0);
   const handoffTimerRef = useRef<number | null>(null);
   const lastAutoOpenedPresentationKeyRef = useRef<string | null>(null);
+  const promptArrivalPresentedRef = useRef(false);
   const conversation = useCoworkerConversation({ roomId, getCanvasViewport });
   const presence = resolveCoworkerPresenceView({
     status: conversation.status,
@@ -165,7 +172,9 @@ export function CoworkerConversationWindow({
   useEffect(() => {
     setInputFocused(false);
     setAcknowledgedPresentationKey(null);
+    setPromptPresetMode("empty-canvas");
     lastAutoOpenedPresentationKeyRef.current = null;
+    promptArrivalPresentedRef.current = false;
     dispatchSurface({ type: "open-composer" });
 
     return () => {
@@ -174,6 +183,29 @@ export function CoworkerConversationWindow({
       }
     };
   }, [roomId]);
+
+  useEffect(() => {
+    if (
+      !online ||
+      promptArrivalPresentedRef.current ||
+      conversation.turns.length > 0 ||
+      conversation.message.trim()
+    ) {
+      return;
+    }
+
+    promptArrivalPresentedRef.current = true;
+    setInputFocused(false);
+    setPromptPresetMode(
+      hasCanvasContent?.() ? "canvas-context" : "empty-canvas"
+    );
+    dispatchSurface({ type: "show-prompts" });
+  }, [
+    conversation.message,
+    conversation.turns.length,
+    hasCanvasContent,
+    online
+  ]);
 
   useEffect(() => {
     if (surface.kind === "closed") {
@@ -233,14 +265,16 @@ export function CoworkerConversationWindow({
     });
   };
 
-  const sendMessage = () => {
+  const sendMessage = (messageOverride?: string) => {
     if (!syncOnline) {
       return Promise.resolve();
     }
-    const submittedMessage = conversation.message.trim();
+    const submittedMessage = (
+      messageOverride ?? conversation.message
+    ).trim();
     const shouldAnimateHandoff = Boolean(submittedMessage) && !conversation.busy;
     // 请求立即开始；Composer 让位给当前工作物件，让交接和执行状态保持在同一处。
-    const request = conversation.sendMessage();
+    const request = conversation.sendMessage(messageOverride);
     if (shouldAnimateHandoff) {
       handoffSequenceRef.current += 1;
       setHandoff({
@@ -306,6 +340,8 @@ export function CoworkerConversationWindow({
           onCloseActivity={closeActivityLog}
           onCloseSurface={closeSurface}
           onComposerFocusChange={setInputFocused}
+          onDismissPrompts={closeSurface}
+          onInvokePrompt={(prompt) => sendMessage(prompt)}
           onJoin={join}
           onInspectApprovalTargets={onLocateResult}
           onLocateResult={onLocateResult ? locateResult : undefined}
@@ -344,6 +380,7 @@ export function CoworkerConversationWindow({
           online={online}
           pendingApproval={pendingApproval}
           phase={presence.phase}
+          promptPresetMode={promptPresetMode}
           resultRecordIds={result?.recordIds ?? []}
           resultWarnings={result?.warnings ?? []}
           resolveCanvasTarget={resolveCanvasTarget}
