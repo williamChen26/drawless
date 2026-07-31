@@ -6,3 +6,4 @@ export * from "./canvas-observation.js";
 export * from "./canvas-context.js";
 export * from "./canvas-edit.js";
 export * from "./coworker-conversation.js";
+export * from "./feedback.js";

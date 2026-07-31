@@ -7,6 +7,9 @@ export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 3001;
 export const DEFAULT_COWORKER_BASE_URL = "http://127.0.0.1:4111";
 export const DEFAULT_COWORKER_REQUEST_TIMEOUT_MS = 10_000;
+export const DEFAULT_FEEDBACK_REPOSITORY =
+  "williamChen26/drawless-feedback";
+export const DEFAULT_FEEDBACK_REQUEST_TIMEOUT_MS = 5_000;
 export const DEFAULT_ALLOWED_ORIGINS = [
   "http://127.0.0.1:3000",
   "http://127.0.0.1:3100",
@@ -23,10 +26,30 @@ export type ServerEnv = Partial<
     | "COWORKER_ENABLED"
     | "COWORKER_BASE_URL"
     | "COWORKER_REQUEST_TIMEOUT_MS"
-    | "SERVER_PUBLIC_URL",
+    | "SERVER_PUBLIC_URL"
+    | "FEEDBACK_ENABLED"
+    | "GITHUB_FEEDBACK_REPOSITORY"
+    | "GITHUB_FEEDBACK_TOKEN"
+    | "FEEDBACK_REQUEST_TIMEOUT_MS",
     string
   >
 >;
+
+export type FeedbackServerConfig =
+  | {
+      /** 是否允许浏览器提交公开反馈。 */
+      enabled: false;
+    }
+  | {
+      /** 是否允许浏览器提交公开反馈。 */
+      enabled: true;
+      /** 接收反馈 Issue 的 GitHub 仓库。 */
+      repository: string;
+      /** 只在 server 进程中使用的 GitHub fine-grained token。 */
+      token: string;
+      /** server 等待 GitHub API 的最长毫秒数。 */
+      requestTimeoutMs: number;
+    };
 
 export function loadServerConfig(
   env: ServerEnv = process.env
@@ -54,6 +77,41 @@ export function loadServerConfig(
         "COWORKER_REQUEST_TIMEOUT_MS"
       )
     }
+  };
+}
+
+export function loadFeedbackServerConfig(
+  env: ServerEnv = process.env
+): FeedbackServerConfig {
+  const enabled = parseBoolean(env.FEEDBACK_ENABLED, false);
+  if (!enabled) {
+    return { enabled: false };
+  }
+
+  const repository =
+    env.GITHUB_FEEDBACK_REPOSITORY?.trim() || DEFAULT_FEEDBACK_REPOSITORY;
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(repository)) {
+    throw new Error(
+      "GITHUB_FEEDBACK_REPOSITORY must use the owner/repository format."
+    );
+  }
+
+  const token = env.GITHUB_FEEDBACK_TOKEN?.trim();
+  if (!token) {
+    throw new Error(
+      "GITHUB_FEEDBACK_TOKEN is required when FEEDBACK_ENABLED is true."
+    );
+  }
+
+  return {
+    enabled: true,
+    repository,
+    token,
+    requestTimeoutMs: parsePositiveInteger(
+      env.FEEDBACK_REQUEST_TIMEOUT_MS,
+      DEFAULT_FEEDBACK_REQUEST_TIMEOUT_MS,
+      "FEEDBACK_REQUEST_TIMEOUT_MS"
+    )
   };
 }
 

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { DRAWLESS_COWORKER_DISPLAY_NAME } from "@drawless/shared";
 
 import type { CoworkerControlState } from "./coworker-control-state";
+import { FeedbackDialog } from "./feedback-dialog";
 
 export type CollaborationStatusView = {
   /** debug 模式顶部栏展示的协同状态名称。 */
@@ -37,27 +38,35 @@ export function CanvasShellFrame({
         <div className="canvas-shell__brand">
           <strong>drawless</strong>
         </div>
-        {showDebugUi ? (
-          <div className="canvas-shell__toolbar" aria-label="画布诊断控制">
-            <span
-              className="canvas-shell__pill"
-              data-testid="sync-status"
-              data-state={statusView.state}
-              title={statusView.detail}
+        <div className="canvas-shell__header-actions">
+          {showDebugUi ? (
+            <div
+              className="canvas-shell__toolbar"
+              aria-label="画布诊断控制"
             >
-              {statusView.label}
-            </span>
-            {participantLabel ? (
               <span
-                className="canvas-shell__identity"
-                data-testid="collab-identity"
+                className="canvas-shell__pill"
+                data-testid="sync-status"
+                data-state={statusView.state}
+                title={statusView.detail}
               >
-                {participantLabel}
+                {statusView.label}
               </span>
-            ) : null}
-            {coworker ? <CoworkerControlBar coworker={coworker} /> : null}
-          </div>
-        ) : null}
+              {participantLabel ? (
+                <span
+                  className="canvas-shell__identity"
+                  data-testid="collab-identity"
+                >
+                  {participantLabel}
+                </span>
+              ) : null}
+              {coworker ? (
+                <CoworkerControlBar coworker={coworker} />
+              ) : null}
+            </div>
+          ) : null}
+          <FeedbackDialog />
+        </div>
       </header>
       <section className="canvas-shell__workspace" aria-label="Infinite canvas">
         {children}

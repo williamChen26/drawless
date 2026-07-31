@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   DrawlessCoworkerConversationToolApprovalRequest,
@@ -8,6 +8,7 @@ import type {
 import { loadServerConfig } from "../../config.js";
 import { createCoworkerApprovalRegistry } from "../../coworker/coworker-approval-registry.js";
 import type { CoworkerControlClient } from "../../coworker/coworker-control-client.js";
+import type { FeedbackClient } from "../../feedback/github-feedback-client.js";
 import { createServerApp } from "../app.js";
 
 describe("server app", () => {
@@ -78,6 +79,104 @@ describe("server app", () => {
     expect(response.headers["access-control-allow-headers"]).toContain(
       "content-type"
     );
+
+    await app.close();
+  });
+
+  it("creates one GitHub issue for safe retries of the same feedback", async () => {
+    const createIssue = vi.fn<FeedbackClient["createIssue"]>(
+      async () => ({ issueNumber: 24 })
+    );
+    const { app } = await createServerApp({
+      config: loadServerConfig({
+        ALLOWED_ORIGINS: "http://127.0.0.1:3000"
+      }),
+      feedbackClient: { createIssue }
+    });
+    const payload = {
+      submissionId: "11111111-1111-4111-8111-111111111111",
+      category: "suggestion",
+      message: "希望断线恢复时能给出更明确的提示。",
+      surface: "canvas"
+    };
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/feedback",
+      headers: { origin: "http://127.0.0.1:3000" },
+      payload
+    });
+    const retry = await app.inject({
+      method: "POST",
+      url: "/feedback",
+      headers: { origin: "http://127.0.0.1:3000" },
+      payload
+    });
+
+    expect(first.statusCode, first.body).toBe(201);
+    expect(first.json()).toEqual({ ok: true, issueNumber: 24 });
+    expect(retry.statusCode).toBe(201);
+    expect(createIssue).toHaveBeenCalledTimes(1);
+    expect(createIssue).toHaveBeenCalledWith(payload);
+
+    await app.close();
+  });
+
+  it("rejects untrusted origins and rate limits anonymous feedback", async () => {
+    const feedbackClient: FeedbackClient = {
+      createIssue: async () => ({ issueNumber: 1 })
+    };
+    const { app } = await createServerApp({
+      config: loadServerConfig({
+        ALLOWED_ORIGINS: "http://127.0.0.1:3000"
+      }),
+      feedbackClient
+    });
+    const basePayload = {
+      category: "bug",
+      message: "这个反馈内容足够长，可以通过共享校验。",
+      surface: "canvas"
+    };
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/feedback",
+      headers: { origin: "https://untrusted.example" },
+      payload: {
+        ...basePayload,
+        submissionId: "11111111-1111-4111-8111-111111111111"
+      }
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    for (const submissionId of [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333"
+    ]) {
+      const accepted = await app.inject({
+        method: "POST",
+        url: "/feedback",
+        headers: { origin: "http://127.0.0.1:3000" },
+        payload: { ...basePayload, submissionId }
+      });
+      expect(accepted.statusCode, accepted.body).toBe(201);
+    }
+
+    const limited = await app.inject({
+      method: "POST",
+      url: "/feedback",
+      headers: { origin: "http://127.0.0.1:3000" },
+      payload: {
+        ...basePayload,
+        submissionId: "44444444-4444-4444-8444-444444444444"
+      }
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.headers["retry-after"]).toBeTruthy();
+    expect(limited.json()).toMatchObject({
+      ok: false,
+      code: "RATE_LIMITED"
+    });
 
     await app.close();
   });

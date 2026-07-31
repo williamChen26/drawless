@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { loadServerConfig } from "../config.js";
+import {
+  loadFeedbackServerConfig,
+  loadServerConfig
+} from "../config.js";
 
 describe("server config", () => {
   it("loads conservative local defaults", () => {
@@ -46,5 +49,27 @@ describe("server config", () => {
     expect(() =>
       loadServerConfig({ COWORKER_ENABLED: "sometimes" })
     ).toThrow("COWORKER_ENABLED");
+  });
+
+  it("keeps GitHub feedback disabled until a server-only token is configured", () => {
+    expect(loadFeedbackServerConfig({})).toEqual({ enabled: false });
+    expect(() =>
+      loadFeedbackServerConfig({ FEEDBACK_ENABLED: "true" })
+    ).toThrow("GITHUB_FEEDBACK_TOKEN");
+
+    expect(
+      loadFeedbackServerConfig({
+        FEEDBACK_ENABLED: "true",
+        GITHUB_FEEDBACK_REPOSITORY:
+          "williamChen26/drawless-feedback",
+        GITHUB_FEEDBACK_TOKEN: "test-token",
+        FEEDBACK_REQUEST_TIMEOUT_MS: "6000"
+      })
+    ).toEqual({
+      enabled: true,
+      repository: "williamChen26/drawless-feedback",
+      token: "test-token",
+      requestTimeoutMs: 6000
+    });
   });
 });

@@ -67,7 +67,15 @@ COWORKER_ENABLED=true
 COWORKER_BASE_URL=https://coworker-production-4aab.up.railway.app
 SERVER_PUBLIC_URL=https://drawlessserver-production.up.railway.app
 COWORKER_REQUEST_TIMEOUT_MS=10000
+FEEDBACK_ENABLED=true
+GITHUB_FEEDBACK_REPOSITORY=williamChen26/drawless-feedback
+GITHUB_FEEDBACK_TOKEN=你的-fine-grained-token
+FEEDBACK_REQUEST_TIMEOUT_MS=5000
 ```
+
+`GITHUB_FEEDBACK_TOKEN` 只授予 `drawless-feedback` 仓库的
+`Issues: read and write` 权限。它只属于 server，不能添加 `NEXT_PUBLIC_`
+前缀，也不能配置到 web service。
 
 Build Command：
 

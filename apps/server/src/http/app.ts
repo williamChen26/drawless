@@ -35,12 +35,15 @@ import {
   type RoomRegistry
 } from "../sync/room-registry.js";
 import { attachTldrawSyncSocket } from "../sync/tldraw-sync.js";
+import { registerFeedbackRoutes } from "../feedback/feedback-routes.js";
+import type { FeedbackClient } from "../feedback/github-feedback-client.js";
 
 export type CreateServerAppOptions = {
   config: DrawlessServerConfig;
   registry?: RoomRegistry;
   coworkerClient?: CoworkerControlClient;
   coworkerApprovalRegistry?: CoworkerApprovalRegistry;
+  feedbackClient?: FeedbackClient | null;
   logger?: boolean;
 };
 
@@ -88,9 +91,11 @@ export async function createServerApp({
   registry = createRoomRegistry(),
   coworkerClient,
   coworkerApprovalRegistry = createCoworkerApprovalRegistry(),
+  feedbackClient = null,
   logger = false
 }: CreateServerAppOptions): Promise<ServerApp> {
-  const app = Fastify({ logger });
+  // Railway 位于反向代理之后；读取可信代理链才能让匿名反馈按真实来源限流。
+  const app = Fastify({ logger, trustProxy: true });
   const resolvedCoworkerClient =
     coworkerClient ?? createCoworkerControlClientIfConfigured(config);
 
@@ -125,6 +130,11 @@ export async function createServerApp({
     rooms: registry.getStats(),
     storage: storageSummary
   }));
+
+  registerFeedbackRoutes(app, {
+    allowedOrigins: config.allowedOrigins,
+    feedbackClient
+  });
 
   app.post<{ Params: CoworkerRouteParams }>(
     "/rooms/:roomId/coworker/start",
