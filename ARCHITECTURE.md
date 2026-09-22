@@ -25,15 +25,15 @@ drawless 的核心目标是让用户、其他协作者和 Drew 在同一个 tldr
 ## 当前运行链路
 
 1. 用户访问 `/`。
-2. Next 根页面生成房间 ID。
-3. 浏览器跳转到 `/rooms/:roomId`。
+2. Next 根页面按请求生成房间 ID，并在配置密钥时签发 7 天有效的房间凭据。
+3. 浏览器跳转到 `/rooms/:roomId#access=…`；fragment 中的凭据随后用于 HTTP 和 WebSocket 认证。
 4. `CanvasShell` 在客户端创建或读取浏览器设备 ID。
 5. 当前标签页生成临时标签页 ID。
 6. 前端组合出 tldraw sync 会话 ID。
 7. 前端根据 `NEXT_PUBLIC_DRAWLESS_SYNC_SERVER_URL` 拼出 WebSocket 房间地址。
 8. `useSync` 创建 tldraw 远程 store。
 9. 后端 `/sync/:roomId` 接收 WebSocket。
-10. 后端校验来源、房间 ID、会话 ID。
+10. 后端校验来源、房间签名、房间 ID、会话 ID。
 11. 后端从房间注册表获取或创建 `TLSocketRoom`。
 12. 多个客户端连接同一房间时，共享同一份进程内协同状态。
 
@@ -67,7 +67,7 @@ conversation、run、toolCallId 和 sessionId 只属于技术控制面，不构�
 - 全局唯一房间调度。
 - 可持久化的协同存储。
 - 大文件资产存储。
-- 认证和授权。
+- 更细的账号、角色、撤销和续签策略；当前只有完整房间分享权限。
 - 上传大小限制和速率限制。
 
 ## 前端模型
@@ -130,3 +130,9 @@ pnpm check
 ```
 
 它覆盖 shared、ui、server 和 web 的单测、类型检查、构建与基础协同 smoke。`apps/coworker` 的 Mastra build 和完整控制面 smoke 由 `pnpm smoke:coworker-control` 单独验证。
+
+## 生命周期和安全边界
+
+完整运行配置见 [DEPLOYMENT.md](./DEPLOYMENT.md)。runtime 控制面通过内部 Bearer token 保护，只接受配置中的 sync 地址；工具权限通过不可由 HTTP JSON 伪造的请求上下文绑定 room。审批恢复须匹配 room/run/toolCall，停止房间会取消模型调用并使旧审批失效。
+
+Node socket adapter 负责重连和 push_result 确认；编辑器只同步提交最新记录，不生成动画中间文档。失败、取消或断线时不能把本地变更当作已交付结果。共享文档仍然只存在于 tldraw 协同存储中。

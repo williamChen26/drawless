@@ -1,5 +1,6 @@
 import {
   createShapeId,
+  transact,
   getIndexAbove,
   sortByIndex,
   toRichText,
@@ -27,7 +28,7 @@ import type {
   DrawlessCanvasEditableShapeKind,
   DrawlessCanvasPoint,
   DrawlessRoomId,
-} from '../../../../../packages/shared/src/index';
+} from '@drawless/shared';
 
 type ApplyCanvasEditInput = {
   /** 要写入的 coworker 本地同步 store。 */
@@ -38,6 +39,8 @@ type ApplyCanvasEditInput = {
   fallbackPageId: TLPageId;
   /** 可选 presence 控制器，用于拟人化执行时移动 coworker 光标。 */
   presence?: CanvasEditPresenceController | undefined;
+  /** 每次提交前验证连接及取消状态。 */
+  assertCanWrite?: (() => void) | undefined;
 };
 
 export type CanvasEditPresencePatch = {
@@ -90,51 +93,39 @@ const DEFAULT_GEO_SIZE = 120;
 const DEFAULT_TEXT_WIDTH = 220;
 const DEFAULT_SHAPE_SIZE = 'm';
 const DEFAULT_ARROW_BINDING_ANCHOR = { x: 0.5, y: 0.5 };
-const PERFORMED_FRAME_COUNT = 5;
-const PERFORMED_FRAME_DELAY_MS = 70;
-const PERFORMED_STEP_DELAY_MS = 120;
 
 export async function performCanvasEditToStore(
   input: ApplyCanvasEditInput
 ): Promise<DrawlessCanvasEditResult> {
-  const context = createApplyContext(input);
+  // presence 可以异步更新；所有 document 操作在其后读取最新记录并同步提交。
+  await input.presence?.updatePresence({ selectedShapeIds: [], chatMessage: '' });
+  input.assertCanWrite?.();
+  let context: CanvasEditApplyContext;
+  try {
+    context = createApplyContext(input);
+  } catch (error) {
+    return createUnavailableCanvasEditResult({
+      roomId: input.request.roomId,
+      reason: error instanceof Error ? error.message : '目标 page 已不可用。',
+    });
+  }
   const createdRecordIds: string[] = [];
   const updatedRecordIds = new Set<string>();
   const warnings: string[] = [];
 
-  await input.presence?.updatePresence({
-    currentPageId: context.pageId,
-    selectedShapeIds: [],
-    chatMessage: '我来画一下。',
-  });
-  await wait(PERFORMED_STEP_DELAY_MS);
-
-  for (const operation of input.request.operations) {
-    const result = await performOperation({
-      context,
-      operation,
-      presence: input.presence,
-    });
-
-    mergeOperationResult({
-      result,
-      createdRecordIds,
-      updatedRecordIds,
-      warnings,
-    });
-    rememberCreatedShape(context, operation.operationId, result.createdShapeId);
-
-    const writeError = result.warnings.find((warning) => warning.includes('写入 tldraw store 失败'));
-    if (writeError) {
-      break;
+  // 不向 document 写入动画中间帧，避免旧 shape 覆盖其他协作者的并发修改。
+  transact(() => {
+    for (const operation of input.request.operations) {
+      input.assertCanWrite?.();
+      const result = prepareOperation(context, operation);
+      const error = putRecords({ store: input.store, operationId: operation.operationId, records: result.recordsToPut });
+      if (error) {
+        warnings.push(error);
+        break;
+      }
+      mergeOperationResult({ result, createdRecordIds, updatedRecordIds, warnings });
+      rememberCreatedShape(context, operation.operationId, result.createdShapeId);
     }
-
-    await wait(PERFORMED_STEP_DELAY_MS);
-  }
-
-  await input.presence?.updatePresence({
-    selectedShapeIds: [],
-    chatMessage: '',
   });
 
   return createCanvasEditResult({
@@ -197,42 +188,21 @@ function rememberCreatedShape(
   context.knownShapeIds.add(createdShapeId);
 }
 
-async function performOperation(input: {
-  context: CanvasEditApplyContext;
-  operation: DrawlessCanvasEditOperation;
-  presence?: CanvasEditPresenceController | undefined;
-}): Promise<CanvasEditOperationResult> {
-  switch (input.operation.kind) {
+function prepareOperation(
+  context: CanvasEditApplyContext,
+  operation: DrawlessCanvasEditOperation
+): CanvasEditOperationResult {
+  switch (operation.kind) {
     case 'create_shape':
-      return performCreateShapeOperation({
-        context: input.context,
-        operation: input.operation,
-        presence: input.presence,
-      });
+      return createShapeOperation({ request: context.request, operation, pageId: context.pageId, index: context.nextIndex() });
     case 'create_arrow':
-      return performCreateArrowOperation({
-        context: input.context,
-        operation: input.operation,
-        presence: input.presence,
-      });
+      return createArrowOperation({ context, request: context.request, operation, pageId: context.pageId, index: context.nextIndex() });
     case 'update_shape_text':
-      return performUpdateShapeTextOperation({
-        context: input.context,
-        operation: input.operation,
-        presence: input.presence,
-      });
+      return updateShapeTextOperation({ store: context.store, operation });
     case 'move_shape':
-      return performMoveShapeOperation({
-        context: input.context,
-        operation: input.operation,
-        presence: input.presence,
-      });
+      return moveShapeOperation({ store: context.store, operation });
     case 'resize_shape':
-      return performResizeShapeOperation({
-        context: input.context,
-        operation: input.operation,
-        presence: input.presence,
-      });
+      return resizeShapeOperation({ store: context.store, operation });
   }
 }
 
@@ -545,7 +515,23 @@ function resolveArrowBindingTargetShapeId(input: {
     };
   }
 
+  const targetPage = findShapePageId(input.context.store, targetId);
+  if (targetPage !== input.context.pageId) {
+    return { ok: false, warning: `${input.operationId}: 箭头 ${input.terminal} 端目标已不在当前 page，已降级为坐标端点。` };
+  }
+
   return { ok: true, value: targetId as TLShapeId };
+}
+
+function findShapePageId(store: TLStore, shapeId: string): string | null {
+  let record: TLRecord | undefined = store.get(shapeId as TLShapeId);
+  const visited = new Set<string>();
+  while (record?.typeName === 'shape') {
+    if (visited.has(record.id)) return null;
+    visited.add(record.id);
+    record = store.get(record.parentId);
+  }
+  return record?.typeName === 'page' ? record.id : null;
 }
 
 function createBindingId() {
@@ -647,329 +633,6 @@ function resizeShapeOperation(input: {
   };
 }
 
-async function performCreateShapeOperation(input: {
-  context: CanvasEditApplyContext;
-  operation: DrawlessCanvasEditCreateShapeOperation;
-  presence?: CanvasEditPresenceController | undefined;
-}): Promise<CanvasEditOperationResult> {
-  const result = createShapeOperation({
-    request: input.context.request,
-    operation: input.operation,
-    pageId: input.context.pageId,
-    index: input.context.nextIndex(),
-  });
-  const finalShape = result.recordsToPut.find(isShapeRecord);
-  if (!finalShape) {
-    return result;
-  }
-
-  const finalShapeWithoutText = setShapeRichText(finalShape, '');
-  const initialShape = createInitialShapeFrame(finalShapeWithoutText);
-  await input.presence?.updatePresence({
-    currentPageId: input.context.pageId,
-    cursor: getShapeCenter(initialShape),
-    selectedShapeIds: [finalShape.id],
-  });
-
-  const initialWriteError = putRecords({
-    store: input.context.store,
-    operationId: input.operation.operationId,
-    records: [initialShape],
-  });
-  if (initialWriteError) {
-    return {
-      ...result,
-      recordsToPut: [],
-      createdRecordIds: [],
-      warnings: [...result.warnings, initialWriteError],
-    };
-  }
-
-  for (let frame = 1; frame <= PERFORMED_FRAME_COUNT; frame += 1) {
-    const progress = frame / PERFORMED_FRAME_COUNT;
-    const nextShape = interpolateShapeFrame(initialShape, finalShapeWithoutText, progress);
-    const writeError = putRecords({
-      store: input.context.store,
-      operationId: input.operation.operationId,
-      records: [nextShape],
-    });
-    if (writeError) {
-      return {
-        ...result,
-        recordsToPut: [],
-        warnings: [...result.warnings, writeError],
-      };
-    }
-    await input.presence?.updatePresence({
-      cursor: getShapeCenter(nextShape),
-      selectedShapeIds: [finalShape.id],
-    });
-    await wait(PERFORMED_FRAME_DELAY_MS);
-  }
-
-  if (input.operation.text?.trim()) {
-    const chunks = createTextChunks(input.operation.text);
-    for (const chunk of chunks) {
-      const nextShape = setShapeRichText(finalShape, chunk);
-      const writeError = putRecords({
-        store: input.context.store,
-        operationId: input.operation.operationId,
-        records: [nextShape],
-      });
-      if (writeError) {
-        return {
-          ...result,
-          recordsToPut: [],
-          warnings: [...result.warnings, writeError],
-        };
-      }
-      await wait(PERFORMED_FRAME_DELAY_MS);
-    }
-  }
-
-  return { ...result, recordsToPut: [] };
-}
-
-async function performCreateArrowOperation(input: {
-  context: CanvasEditApplyContext;
-  operation: DrawlessCanvasEditCreateArrowOperation;
-  presence?: CanvasEditPresenceController | undefined;
-}): Promise<CanvasEditOperationResult> {
-  const result = createArrowOperation({
-    context: input.context,
-    request: input.context.request,
-    operation: input.operation,
-    pageId: input.context.pageId,
-    index: input.context.nextIndex(),
-  });
-  const finalArrow = result.recordsToPut.find(isArrowShapeRecord);
-  if (!finalArrow) {
-    return result;
-  }
-
-  const initialArrow: TLArrowShape = {
-    ...finalArrow,
-    props: {
-      ...finalArrow.props,
-      end: { x: 0, y: 0 },
-      richText: toRichText(''),
-    },
-  };
-  const startBindingRecords = result.recordsToPut.filter((record) =>
-    isArrowBindingRecord(record, 'start')
-  );
-  const from = normalizePoint(input.operation.from);
-  const to = normalizePoint(input.operation.to);
-
-  await input.presence?.updatePresence({
-    currentPageId: input.context.pageId,
-    cursor: from,
-    selectedShapeIds: [finalArrow.id],
-  });
-
-  const initialWriteError = putRecords({
-    store: input.context.store,
-    operationId: input.operation.operationId,
-    records: [initialArrow, ...startBindingRecords],
-  });
-  if (initialWriteError) {
-    return {
-      ...result,
-      recordsToPut: [],
-      createdRecordIds: [],
-      warnings: [...result.warnings, initialWriteError],
-    };
-  }
-
-  for (let frame = 1; frame <= PERFORMED_FRAME_COUNT; frame += 1) {
-    const progress = frame / PERFORMED_FRAME_COUNT;
-    const cursor = interpolatePoint(from, to, progress);
-    const nextArrow: TLArrowShape = {
-      ...finalArrow,
-      props: {
-        ...finalArrow.props,
-        end: {
-          x: finalArrow.props.end.x * progress,
-          y: finalArrow.props.end.y * progress,
-        },
-        richText: toRichText(''),
-      },
-    };
-    const writeError = putRecords({
-      store: input.context.store,
-      operationId: input.operation.operationId,
-      records: [nextArrow],
-    });
-    if (writeError) {
-      return {
-        ...result,
-        recordsToPut: [],
-        warnings: [...result.warnings, writeError],
-      };
-    }
-    await input.presence?.updatePresence({
-      cursor,
-      selectedShapeIds: [finalArrow.id],
-    });
-    await wait(PERFORMED_FRAME_DELAY_MS);
-  }
-
-  const finalWriteError = putRecords({
-    store: input.context.store,
-    operationId: input.operation.operationId,
-    records: result.recordsToPut,
-  });
-  if (finalWriteError) {
-    return {
-      ...result,
-      recordsToPut: [],
-      warnings: [...result.warnings, finalWriteError],
-    };
-  }
-
-  if (input.operation.text?.trim()) {
-    for (const chunk of createTextChunks(input.operation.text)) {
-      const nextArrow = setShapeRichText(finalArrow, chunk);
-      const writeError = putRecords({
-        store: input.context.store,
-        operationId: input.operation.operationId,
-        records: [nextArrow],
-      });
-      if (writeError) {
-        return {
-          ...result,
-          recordsToPut: [],
-          warnings: [...result.warnings, writeError],
-        };
-      }
-      await wait(PERFORMED_FRAME_DELAY_MS);
-    }
-  }
-
-  return { ...result, recordsToPut: [] };
-}
-
-async function performUpdateShapeTextOperation(input: {
-  context: CanvasEditApplyContext;
-  operation: Extract<DrawlessCanvasEditOperation, { kind: 'update_shape_text' }>;
-  presence?: CanvasEditPresenceController | undefined;
-}): Promise<CanvasEditOperationResult> {
-  const result = updateShapeTextOperation({
-    store: input.context.store,
-    operation: input.operation,
-  });
-  const finalShape = result.recordsToPut.find(isShapeRecord);
-  if (!finalShape) {
-    return result;
-  }
-
-  await input.presence?.updatePresence({
-    cursor: getShapeCenter(finalShape),
-    selectedShapeIds: [finalShape.id],
-  });
-  for (const chunk of createTextChunks(input.operation.text)) {
-    const writeError = putRecords({
-      store: input.context.store,
-      operationId: input.operation.operationId,
-      records: [setShapeRichText(finalShape, chunk)],
-    });
-    if (writeError) {
-      return {
-        ...result,
-        recordsToPut: [],
-        warnings: [...result.warnings, writeError],
-      };
-    }
-    await wait(PERFORMED_FRAME_DELAY_MS);
-  }
-
-  return { ...result, recordsToPut: [] };
-}
-
-async function performMoveShapeOperation(input: {
-  context: CanvasEditApplyContext;
-  operation: Extract<DrawlessCanvasEditOperation, { kind: 'move_shape' }>;
-  presence?: CanvasEditPresenceController | undefined;
-}): Promise<CanvasEditOperationResult> {
-  const shapeBefore = getEditableShape(input.context.store, input.operation.shapeId);
-  const result = moveShapeOperation({
-    store: input.context.store,
-    operation: input.operation,
-  });
-  const finalShape = result.recordsToPut.find(isShapeRecord);
-  if (!shapeBefore || !finalShape) {
-    return result;
-  }
-
-  for (let frame = 1; frame <= PERFORMED_FRAME_COUNT; frame += 1) {
-    const progress = frame / PERFORMED_FRAME_COUNT;
-    const nextShape = {
-      ...finalShape,
-      x: interpolateNumber(shapeBefore.x, finalShape.x, progress),
-      y: interpolateNumber(shapeBefore.y, finalShape.y, progress),
-    };
-    const writeError = putRecords({
-      store: input.context.store,
-      operationId: input.operation.operationId,
-      records: [nextShape],
-    });
-    if (writeError) {
-      return {
-        ...result,
-        recordsToPut: [],
-        warnings: [...result.warnings, writeError],
-      };
-    }
-    await input.presence?.updatePresence({
-      cursor: getShapeCenter(nextShape),
-      selectedShapeIds: [finalShape.id],
-    });
-    await wait(PERFORMED_FRAME_DELAY_MS);
-  }
-
-  return { ...result, recordsToPut: [] };
-}
-
-async function performResizeShapeOperation(input: {
-  context: CanvasEditApplyContext;
-  operation: Extract<DrawlessCanvasEditOperation, { kind: 'resize_shape' }>;
-  presence?: CanvasEditPresenceController | undefined;
-}): Promise<CanvasEditOperationResult> {
-  const shapeBefore = getEditableShape(input.context.store, input.operation.shapeId);
-  const result = resizeShapeOperation({
-    store: input.context.store,
-    operation: input.operation,
-  });
-  const finalShape = result.recordsToPut.find(isShapeRecord);
-  if (!shapeBefore || !finalShape) {
-    return result;
-  }
-
-  for (let frame = 1; frame <= PERFORMED_FRAME_COUNT; frame += 1) {
-    const progress = frame / PERFORMED_FRAME_COUNT;
-    const nextShape = interpolateShapeFrame(shapeBefore, finalShape, progress);
-    const writeError = putRecords({
-      store: input.context.store,
-      operationId: input.operation.operationId,
-      records: [nextShape],
-    });
-    if (writeError) {
-      return {
-        ...result,
-        recordsToPut: [],
-        warnings: [...result.warnings, writeError],
-      };
-    }
-    await input.presence?.updatePresence({
-      cursor: getShapeCenter(nextShape),
-      selectedShapeIds: [finalShape.id],
-    });
-    await wait(PERFORMED_FRAME_DELAY_MS);
-  }
-
-  return { ...result, recordsToPut: [] };
-}
-
 function skippedOperation(operationId: string, reason: string) {
   return {
     recordsToPut: [],
@@ -981,26 +644,21 @@ function skippedOperation(operationId: string, reason: string) {
 
 function getEditableShape(store: TLStore, shapeId: string) {
   const record = store.get(shapeId as TLShapeId);
-  return isShapeRecord(record) ? record : null;
+  if (!isShapeRecord(record)) return null;
+  // 锁定的祖先同样保护其子图形。
+  let current: TLShape | undefined = record;
+  const visited = new Set<string>();
+  while (current) {
+    if (current.isLocked || visited.has(current.id)) return null;
+    visited.add(current.id);
+    const parent: TLRecord | undefined = store.get(current.parentId);
+    current = isShapeRecord(parent) ? parent : undefined;
+  }
+  return record;
 }
 
 function isShapeRecord(record: TLRecord | undefined): record is TLShape {
   return record?.typeName === 'shape';
-}
-
-function isArrowShapeRecord(record: TLRecord | undefined): record is TLArrowShape {
-  return record?.typeName === 'shape' && 'type' in record && record.type === 'arrow';
-}
-
-function isArrowBindingRecord(record: TLRecord, terminal: 'start' | 'end') {
-  if (record.typeName !== 'binding' || !('type' in record) || record.type !== 'arrow') {
-    return false;
-  }
-
-  const props = 'props' in record ? record.props : null;
-  return Boolean(
-    props && typeof props === 'object' && 'terminal' in props && props.terminal === terminal
-  );
 }
 
 function putRecords(input: { store: TLStore; operationId: string; records: TLRecord[] }) {
@@ -1016,121 +674,6 @@ function putRecords(input: { store: TLStore; operationId: string; records: TLRec
   }
 }
 
-function createInitialShapeFrame(shape: TLShape): TLShape {
-  const size = getShapeSize(shape);
-  const center = getShapeCenter(shape);
-  const nextSize = {
-    w: Math.min(size.w, Math.max(MIN_SHAPE_SIZE, size.w * 0.18)),
-    h: Math.min(size.h, Math.max(MIN_SHAPE_SIZE, size.h * 0.18)),
-  };
-
-  return resizeShapeFrame(shape, {
-    x: center.x - nextSize.w / 2,
-    y: center.y - nextSize.h / 2,
-    w: nextSize.w,
-    h: nextSize.h,
-  });
-}
-
-function interpolateShapeFrame(from: TLShape, to: TLShape, progress: number): TLShape {
-  const fromSize = getShapeSize(from);
-  const toSize = getShapeSize(to);
-
-  return resizeShapeFrame(to, {
-    x: interpolateNumber(from.x, to.x, progress),
-    y: interpolateNumber(from.y, to.y, progress),
-    w: interpolateNumber(fromSize.w, toSize.w, progress),
-    h: interpolateNumber(fromSize.h, toSize.h, progress),
-  });
-}
-
-function resizeShapeFrame(
-  shape: TLShape,
-  bounds: { x: number; y: number; w: number; h: number }
-): TLShape {
-  const props = { ...shape.props } as Record<string, unknown>;
-  if ('w' in props) {
-    props.w = bounds.w;
-  }
-  if ('h' in props) {
-    props.h = bounds.h;
-  }
-
-  return {
-    ...shape,
-    x: bounds.x,
-    y: bounds.y,
-    props: props as TLShape['props'],
-  } as TLShape;
-}
-
-function setShapeRichText(shape: TLShape, text: string): TLShape {
-  if (!('richText' in shape.props)) {
-    return shape;
-  }
-
-  return {
-    ...shape,
-    props: {
-      ...shape.props,
-      richText: toRichText(text),
-    },
-  } as TLShape;
-}
-
-function createTextChunks(text: string) {
-  const characters = Array.from(text);
-  if (characters.length <= 4) {
-    return [text];
-  }
-
-  const chunkCount = Math.min(6, Math.max(2, Math.ceil(characters.length / 4)));
-  const chunks: string[] = [];
-  for (let index = 1; index <= chunkCount; index += 1) {
-    const end = Math.ceil((characters.length * index) / chunkCount);
-    chunks.push(characters.slice(0, end).join(''));
-  }
-
-  return chunks;
-}
-
-function getShapeCenter(shape: TLShape): DrawlessCanvasPoint {
-  const size = getShapeSize(shape);
-  return {
-    x: shape.x + size.w / 2,
-    y: shape.y + size.h / 2,
-  };
-}
-
-function getShapeSize(shape: TLShape) {
-  const props = shape.props as Record<string, unknown>;
-  return {
-    w: typeof props.w === 'number' ? props.w : DEFAULT_TEXT_WIDTH,
-    h: typeof props.h === 'number' ? props.h : 32,
-  };
-}
-
-function interpolatePoint(
-  from: DrawlessCanvasPoint,
-  to: DrawlessCanvasPoint,
-  progress: number
-): DrawlessCanvasPoint {
-  return {
-    x: interpolateNumber(from.x, to.x, progress),
-    y: interpolateNumber(from.y, to.y, progress),
-  };
-}
-
-function interpolateNumber(from: number, to: number, progress: number) {
-  return from + (to - from) * progress;
-}
-
-function wait(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 function resolvePageId(input: {
   records: TLRecord[];
   requestedPageId: string | null | undefined;
@@ -1143,6 +686,7 @@ function resolvePageId(input: {
     if (requestedPage) {
       return requestedPage.id as TLPageId;
     }
+    throw new Error('审批计划指定的 page 已不存在，请重新生成计划。');
   }
 
   const fallbackPage = input.records.find(
@@ -1153,7 +697,8 @@ function resolvePageId(input: {
   }
 
   const firstPage = input.records.find((record) => record.typeName === 'page');
-  return (firstPage?.id ?? 'page:page') as TLPageId;
+  if (!firstPage) throw new Error('房间没有可写 page。');
+  return firstPage.id as TLPageId;
 }
 
 function createIndexAllocator(input: { records: TLRecord[]; parentId: TLPageId }) {
@@ -1197,7 +742,7 @@ function normalizeSize(value: number, fallback: number) {
   return Math.min(MAX_SHAPE_SIZE, Math.max(MIN_SHAPE_SIZE, value));
 }
 
-function resolveStyleRole(role: DrawlessCanvasEditStyleRole | undefined) {
+function resolveStyleRole(role: DrawlessCanvasEditStyleRole | undefined): Pick<TLGeoShape['props'], 'color' | 'fill'> {
   switch (role ?? 'default') {
     case 'start':
       return { color: 'green', fill: 'semi' };
@@ -1259,7 +804,9 @@ function createResultSummary(input: {
   const changeSummary =
     visibleChanges.length > 0 ? visibleChanges.join('，') : '画布内容已经更新';
 
-  return `已按“${input.request.intent}”完成画布修改：${changeSummary}。`;
+  return input.warnings.length > 0
+    ? `画布修改部分完成：${changeSummary}；请查看未执行操作的说明。`
+    : `已按“${input.request.intent}”完成画布修改：${changeSummary}。`;
 }
 
 function countShapeRecords(recordIds: string[]) {

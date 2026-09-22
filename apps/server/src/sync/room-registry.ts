@@ -49,6 +49,7 @@ export function createRoomRegistry(): RoomRegistry {
       return { roomId: parsed.value, entry: existing };
     }
 
+    if (rooms.size >= 100) throw new Error("房间数量已达上限。");
     const room = createSyncRoom();
     const entry: RoomEntry = {
       room,
@@ -71,6 +72,7 @@ export function createRoomRegistry(): RoomRegistry {
       const entry = roomEntry.entry;
       const normalizedRoomId = roomEntry.roomId;
 
+      if (entry.connectionCount >= 32) throw new Error("房间连接数量已达上限。");
       if (entry.idleTimer) {
         clearTimeout(entry.idleTimer);
         entry.idleTimer = null;

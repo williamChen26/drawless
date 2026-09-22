@@ -10,6 +10,7 @@ import type {
 } from "@drawless/shared";
 import {
   DRAWLESS_COWORKER_DISPLAY_NAME,
+  verifyRoomAccessToken,
   coworkerApprovalIdSchema,
   coworkerApprovalListQuerySchema,
   coworkerApprovalResolutionRequestSchema,
@@ -35,12 +36,15 @@ import {
   type RoomRegistry
 } from "../sync/room-registry.js";
 import { attachTldrawSyncSocket } from "../sync/tldraw-sync.js";
+import { registerFeedbackRoutes } from "../feedback/feedback-routes.js";
+import type { FeedbackClient } from "../feedback/github-feedback-client.js";
 
 export type CreateServerAppOptions = {
   config: DrawlessServerConfig;
   registry?: RoomRegistry;
   coworkerClient?: CoworkerControlClient;
   coworkerApprovalRegistry?: CoworkerApprovalRegistry;
+  feedbackClient?: FeedbackClient | null;
   logger?: boolean;
 };
 
@@ -74,7 +78,7 @@ const storageSummary: DrawlessStorageSummary = {
   kind: "process-local-memory",
   durable: false,
   note:
-    "@tldraw/sync-core 为每个 TLSocketRoom 使用 InMemorySyncStorage；重启进程会清空房间。"
+    "@tldraw/sync-core 为每个 TLSocketRoom 使用 InMemorySyncStorage；重启进程或最后一个连接离开 30 分钟后会清空房间。"
 };
 
 const DREW_UNAVAILABLE_MESSAGE =
@@ -88,25 +92,45 @@ export async function createServerApp({
   registry = createRoomRegistry(),
   coworkerClient,
   coworkerApprovalRegistry = createCoworkerApprovalRegistry(),
+  feedbackClient = null,
   logger = false
 }: CreateServerAppOptions): Promise<ServerApp> {
-  const app = Fastify({ logger });
+  // 默认不信任客户端转发头；部署时按代理的实际 IP/CIDR 显式配置。
+  const app = Fastify({
+    logger: logger ? { redact: ["req.headers.authorization"], serializers: { req: (req) => ({ method: req.method, url: req.url.split("?")[0] ?? "", remoteAddress: req.ip }) } } : false,
+    trustProxy: config.trustedProxies?.length ? config.trustedProxies : false,
+    bodyLimit: 64 * 1024
+  });
   const resolvedCoworkerClient =
     coworkerClient ?? createCoworkerControlClientIfConfigured(config);
 
-  await app.register(websocket);
+  await app.register(websocket, { options: { maxPayload: 1024 * 1024 } });
 
   app.addHook("onRequest", async (request, reply) => {
     const origin = request.headers.origin;
+    reply.header("vary", "Origin");
+    if (origin && !isOriginAllowed(origin, config.allowedOrigins)) {
+      return reply.code(403).send({ ok: false, error: "Origin is not allowed." });
+    }
     if (isOriginAllowed(origin, config.allowedOrigins) && origin) {
       reply.header("access-control-allow-origin", origin);
       reply.header("access-control-allow-methods", "GET,POST,DELETE,OPTIONS");
-      reply.header("access-control-allow-headers", "content-type");
+      reply.header("access-control-allow-headers", "content-type,authorization");
     }
 
     if (request.method === "OPTIONS") {
       // 浏览器在跨域 POST/DELETE 前会先发 preflight；这里直接返回 204，避免落到普通 route 后变成 404。
       return reply.code(204).send();
+    }
+  });
+
+  app.addHook("preValidation", async (request, reply) => {
+    const roomId = (request.params as { roomId?: string } | null)?.roomId;
+    if (!roomId || !config.roomAccessSecret) return;
+    const token = request.headers.authorization?.replace(/^Bearer /, "")
+      ?? (request.query as { accessToken?: string } | null)?.accessToken;
+    if (!await verifyRoomAccessToken(roomId, token, config.roomAccessSecret)) {
+      return reply.code(401).send({ ok: false, error: "房间链接无效或已过期。" });
     }
   });
 
@@ -122,9 +146,14 @@ export async function createServerApp({
   app.get("/ready", async (): Promise<DrawlessReadyResponse> => ({
     ok: true,
     ready: true,
-    rooms: registry.getStats(),
+    rooms: { roomCount: registry.getStats().roomCount },
     storage: storageSummary
   }));
+
+  registerFeedbackRoutes(app, {
+    allowedOrigins: config.allowedOrigins,
+    feedbackClient
+  });
 
   app.post<{ Params: CoworkerRouteParams }>(
     "/rooms/:roomId/coworker/start",
@@ -216,7 +245,8 @@ export async function createServerApp({
         await ensureCoworkerSessionReady(resolvedCoworkerClient, roomId.value);
         const response = await resolvedCoworkerClient.streamConversation(
           roomId.value,
-          body.data
+          body.data,
+          createReplyAbortSignal(reply)
         );
         return sendCoworkerStreamResponse(reply, response, {
           roomId: roomId.value,
@@ -327,11 +357,13 @@ export async function createServerApp({
           resolution.data.decision === "approve"
             ? await resolvedCoworkerClient.approveConversationToolCall(
                 roomId.value,
-                runtimeRequest
+                runtimeRequest,
+                createReplyAbortSignal(reply)
               )
             : await resolvedCoworkerClient.declineConversationToolCall(
                 roomId.value,
-                runtimeRequest
+                runtimeRequest,
+                createReplyAbortSignal(reply)
               );
         coworkerApprovalRegistry.settle(approvalId.data, { succeeded: true });
         return sendCoworkerStreamResponse(reply, response, {
@@ -483,4 +515,10 @@ function sendCoworkerControlError(
     ok: false,
     error: error instanceof Error ? error.message : String(error)
   });
+}
+
+function createReplyAbortSignal(reply: FastifyReply) {
+  const controller = new AbortController();
+  reply.raw.once("close", () => controller.abort());
+  return controller.signal;
 }

@@ -1,3 +1,4 @@
+import { assertRoomAuthority } from '../collaboration/room-authority';
 import { createTool } from '@mastra/core/tools';
 
 import {
@@ -5,11 +6,11 @@ import {
   canvasEditResultSchema,
   type DrawlessCanvasEditRequest,
   type DrawlessCanvasEditResult,
-} from '../../../../../packages/shared/src/index';
+} from '@drawless/shared';
 import { createUnavailableCanvasEditResult } from './canvas-edit-executor';
 
 type CanvasEditExecutor = (
-  request: DrawlessCanvasEditRequest
+  request: DrawlessCanvasEditRequest, signal?: AbortSignal
 ) => Promise<DrawlessCanvasEditResult> | DrawlessCanvasEditResult;
 
 let canvasEditExecutor: CanvasEditExecutor | null = null;
@@ -25,7 +26,8 @@ export const canvasEditTool = createTool({
   inputSchema: canvasEditRequestSchema,
   outputSchema: canvasEditResultSchema,
   requireApproval: true,
-  execute: async (request) => {
+  execute: async (request, context) => {
+    const signal = assertRoomAuthority(context?.requestContext, request.roomId, true);
     if (!canvasEditExecutor) {
       // 写工具不可用时必须返回明确失败，不能让模型误以为已经修改了画布。
       return createUnavailableCanvasEditResult({
@@ -34,6 +36,6 @@ export const canvasEditTool = createTool({
       });
     }
 
-    return canvasEditExecutor(request);
+    return canvasEditExecutor(request, signal);
   },
 });

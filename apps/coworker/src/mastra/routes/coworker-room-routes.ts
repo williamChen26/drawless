@@ -4,7 +4,7 @@ import {
   coworkerConversationToolApprovalRequestSchema,
   coworkerConversationStreamRequestSchema,
   coworkerStartRequestSchema,
-} from '../../../../../packages/shared/src/index';
+} from '@drawless/shared';
 import type { DrawlessCoworkerRoomRegistry } from '../collaboration/coworker-room-registry';
 import type { DrawlessAgentStreamOutput } from '../collaboration/cursor-chat-reply-handler';
 
@@ -20,7 +20,7 @@ type TextStreamLike = {
 type AgentStreamOutput = {
   textStream: TextStreamLike;
   fullStream?: AsyncIterable<unknown> | undefined;
-} & Pick<DrawlessAgentStreamOutput, 'runId'>;
+} & Pick<DrawlessAgentStreamOutput, 'runId' | 'cancel'>;
 
 // 这组 custom API routes 是 coworker 的控制面，只负责进入、查询、退出 room。
 // 画布读写仍然通过 coworker 自己的 tldraw sync client 走协同边界。
@@ -28,8 +28,8 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
   return [
     registerApiRoute('/drawless/rooms/:roomId/coworker/start', {
       method: 'POST',
-      // 当前阶段用于本地 server/coworker 联调；生产环境需要换成 server 签名或内部鉴权。
-      requiresAuth: false,
+      // 身份认证由 Mastra 全局控制面 middleware 统一执行。
+      requiresAuth: true,
       handler: async (c) => {
         const roomId = c.req.param('roomId');
         const body = await readJsonBody(c.req);
@@ -55,7 +55,7 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
     registerApiRoute('/drawless/rooms/:roomId/coworker/status', {
       method: 'GET',
       // status 只暴露轻量生命周期状态，不返回完整 tldraw document。
-      requiresAuth: false,
+      requiresAuth: true,
       handler: async (c) => {
         const roomId = c.req.param('roomId');
         try {
@@ -67,8 +67,8 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
     }),
     registerApiRoute('/drawless/rooms/:roomId/coworker/conversation/stream', {
       method: 'POST',
-      // 当前阶段用于本地 server/coworker 联调；生产环境需要换成 server 签名或内部鉴权。
-      requiresAuth: false,
+      // 身份认证由 Mastra 全局控制面 middleware 统一执行。
+      requiresAuth: true,
       handler: async (c) => {
         const roomId = c.req.param('roomId');
         const body = await readJsonBody(c.req);
@@ -100,8 +100,8 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
       '/drawless/rooms/:roomId/coworker/conversation/:runId/tool-calls/:toolCallId/approve',
       {
         method: 'POST',
-        // 当前阶段用于本地 server/coworker 联调；生产环境需要换成 server 签名或内部鉴权。
-        requiresAuth: false,
+        // 身份认证由 Mastra 全局控制面 middleware 统一执行。
+        requiresAuth: true,
         handler: async (c) => {
           const roomId = c.req.param('roomId');
           const request = coworkerConversationToolApprovalRequestSchema.safeParse({
@@ -123,7 +123,8 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
           try {
             const result = await coworkerRoomRegistry.approveConversationToolCall(
               roomId,
-              request.data
+              request.data,
+              c.req.raw.signal
             );
             return createConversationStreamResponse(result);
           } catch (error) {
@@ -136,8 +137,8 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
       '/drawless/rooms/:roomId/coworker/conversation/:runId/tool-calls/:toolCallId/decline',
       {
         method: 'POST',
-        // 当前阶段用于本地 server/coworker 联调；生产环境需要换成 server 签名或内部鉴权。
-        requiresAuth: false,
+        // 身份认证由 Mastra 全局控制面 middleware 统一执行。
+        requiresAuth: true,
         handler: async (c) => {
           const roomId = c.req.param('roomId');
           const request = coworkerConversationToolApprovalRequestSchema.safeParse({
@@ -159,7 +160,8 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
           try {
             const result = await coworkerRoomRegistry.declineConversationToolCall(
               roomId,
-              request.data
+              request.data,
+              c.req.raw.signal
             );
             return createConversationStreamResponse(result);
           } catch (error) {
@@ -171,7 +173,7 @@ export function createCoworkerRoomApiRoutes(coworkerRoomRegistry: DrawlessCowork
     registerApiRoute('/drawless/rooms/:roomId/coworker/stop', {
       method: 'DELETE',
       // stop 会关闭 coworker 的 WebSocket client，用于释放 room 内的 AI 同事身份。
-      requiresAuth: false,
+      requiresAuth: true,
       handler: async (c) => {
         const roomId = c.req.param('roomId');
         try {
@@ -213,10 +215,12 @@ function createConversationSseStream(input: {
 }) {
   const encoder = new TextEncoder();
 
+  let cancelled = false;
   return new ReadableStream<Uint8Array>({
+    cancel() { cancelled = true; input.result.cancel?.(); },
     async start(controller) {
       const emit = (chunk: unknown) => {
-        controller.enqueue(encoder.encode(encodeSseChunk(chunk)));
+        if (!cancelled) controller.enqueue(encoder.encode(encodeSseChunk(chunk)));
       };
 
       try {
@@ -235,10 +239,11 @@ function createConversationSseStream(input: {
       } catch (error) {
         emit({
           type: 'error',
-          error: serializeUnknown(error),
+          error: { message: "AI 请求未完成，请重试。" },
         });
       } finally {
-        controller.close();
+        input.result.cancel?.();
+        if (!cancelled) controller.close();
       }
     },
   });
@@ -273,21 +278,4 @@ function getStringField(input: unknown, key: string) {
 
   const value = (input as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : null;
-}
-
-function serializeUnknown(input: unknown) {
-  if (input instanceof Error) {
-    return {
-      name: input.name,
-      message: input.message,
-      stack: input.stack,
-    };
-  }
-
-  try {
-    JSON.stringify(input);
-    return input;
-  } catch {
-    return String(input);
-  }
 }

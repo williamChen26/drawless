@@ -1,9 +1,6 @@
 import {
-  JsonChunkAssembler,
   TLSyncClient,
-  type TLPersistentClientSocket,
   type TLPresenceMode,
-  type TLSocketStatusChangeEvent,
 } from '@tldraw/sync-core';
 import {
   InstancePresenceRecordType,
@@ -15,7 +12,7 @@ import {
   type TLShapeId,
   type TLStore,
 } from 'tldraw';
-import WebSocket from 'ws';
+import { NodeWebSocketSyncAdapter } from './node-sync-socket';
 
 import {
   DRAWLESS_COWORKER_DISPLAY_NAME,
@@ -27,9 +24,10 @@ import {
   type DrawlessCoworkerRoomSnapshotSummary,
   type DrawlessRoomId,
   type DrawlessSessionId,
-} from '../../../../../packages/shared/src/index';
+} from '@drawless/shared';
 import {
   performCanvasEditToStore,
+  createUnavailableCanvasEditResult,
   type CanvasEditPresencePatch,
 } from '../tools/canvas-edit-executor';
 
@@ -38,13 +36,19 @@ export type DrawlessCoworkerRoomClientOptions = {
   roomId: DrawlessRoomId;
   /** drawless server 的 HTTP 或 WebSocket 基础地址。 */
   serverUrl: string;
+  /** 后端统一的协同路由前缀。 */
+  syncRoute?: string | undefined;
+  /** server 签发的当前房间访问凭据。 */
+  accessToken?: string | undefined;
   /** coworker 当前运行实例 ID；不传时自动生成。 */
   instanceId?: string;
   /** coworker 在协同身份中使用的展示名称。 */
   displayName?: string;
   /** coworker 在协同身份中使用的展示颜色。 */
   color?: string;
-  /** 首次从 sync room 完成加载后的回调。 */
+  /** 连接和 hydration 生命周期变化的回调。 */
+  onConnectionChange?: (status: 'starting' | 'online' | 'offline' | 'error') => void;
+  /** 每次 hydration 完成后的回调。 */
   onLoad?: (snapshot: DrawlessCoworkerRoomSnapshot) => void;
   /** sync 协议报告不可恢复错误时的回调。 */
   onSyncError?: (reason: string) => void;
@@ -78,7 +82,7 @@ export type DrawlessCoworkerRoomClient = {
   identity: DrawlessCoworkerIdentity;
   /** coworker 本地同步后的 tldraw store。 */
   store: TLStore;
-  /** 等待首次从 sync room 加载完成。 */
+  /** 等待当前连接周期从 sync room 加载完成。 */
   waitUntilLoaded: () => Promise<DrawlessCoworkerRoomSnapshot>;
   /** 获取当前 store 中的所有 records。 */
   getRecords: () => TLRecord[];
@@ -87,7 +91,7 @@ export type DrawlessCoworkerRoomClient = {
   /** 通过 coworker presence 发送一条 cursor chat。 */
   sendCursorChat: (message: string, cursor?: { x: number; y: number }) => void;
   /** 通过 coworker 本地 TLStore 应用受控画布编辑。 */
-  applyCanvasEdit: (request: DrawlessCanvasEditRequest) => Promise<DrawlessCanvasEditResult>;
+  applyCanvasEdit: (request: DrawlessCanvasEditRequest, signal?: AbortSignal) => Promise<DrawlessCanvasEditResult>;
   /** 关闭 sync client 和 WebSocket adapter。 */
   close: () => void;
 };
@@ -106,7 +110,11 @@ export function createDrawlessCoworkerRoomClient(
     color: options.color?.trim() || '#2563eb',
     instanceId,
   };
-  const load = createDeferred<DrawlessCoworkerRoomSnapshot>();
+  let load = createDeferred<DrawlessCoworkerRoomSnapshot>();
+  let hydrated = false;
+  let closed = false;
+  let queuedEdits = 0;
+  const lifetime = new AbortController();
   const socketStatus = atom<'online' | 'offline'>('drawless-coworker-socket-status', 'offline');
   const collaborationMode = atom<'readonly' | 'readwrite'>(
     'drawless-coworker-collaboration-mode',
@@ -145,6 +153,8 @@ export function createDrawlessCoworkerRoomClient(
   const socket = new NodeWebSocketSyncAdapter(() =>
     createSyncRoomUri({
       serverUrl: options.serverUrl,
+      syncRoute: options.syncRoute,
+      accessToken: options.accessToken,
       roomId,
       sessionId,
     })
@@ -156,12 +166,18 @@ export function createDrawlessCoworkerRoomClient(
     // 这里保持 coworker 内部使用更具体的 TLInstancePresence，传给 sync client 时收窄为 TLRecord。
     presence: presence as unknown as ReturnType<typeof atom<TLRecord | null>>,
     presenceMode,
-    onLoad: () => {
+    onLoad: () => {},
+    onAfterConnect: () => {
+      hydrated = true;
+      socketStatus.set('online');
+      options.onConnectionChange?.('online');
       const snapshot = createRoomSnapshot({ roomId, sessionId, store });
       options.onLoad?.(snapshot);
       load.resolve(snapshot);
     },
     onSyncError: (reason) => {
+      hydrated = false;
+      options.onConnectionChange?.('error');
       options.onSyncError?.(reason);
       load.reject(new Error(reason));
     },
@@ -169,7 +185,14 @@ export function createDrawlessCoworkerRoomClient(
   // TLSyncClient 会监听 socket 状态；这里额外同步到 TLStore collaboration props，
   // 方便后续如果要把 coworker 状态暴露给 Mastra 或 server 控制面。
   const unlistenStatus = socket.onStatusChange((event) => {
-    socketStatus.set(event.status === 'online' ? 'online' : 'offline');
+    if (event.status !== 'online') {
+      if (hydrated) load = createDeferred<DrawlessCoworkerRoomSnapshot>();
+      hydrated = false;
+      socketStatus.set('offline');
+      options.onConnectionChange?.(event.status);
+    } else if (!hydrated) {
+      options.onConnectionChange?.('starting');
+    }
   });
   // 只监听 remote document 变化，避免把 coworker 自己的本地临时状态误当成用户画布操作。
   const unlistenStore = store.listen(
@@ -218,6 +241,7 @@ export function createDrawlessCoworkerRoomClient(
     getSnapshot: () => createRoomSnapshot({ roomId, sessionId, store }),
     sendCursorChat: (message, cursor) => {
       // 暴露一个小的手动发送入口，后续接入 AI 或自定义 API 时可以复用同一条 presence 写入路径。
+      if (closed || !hydrated) return;
       publishCoworkerCursorChat({
         identity,
         localPresence: presence,
@@ -229,38 +253,54 @@ export function createDrawlessCoworkerRoomClient(
         },
       });
     },
-    applyCanvasEdit: (request) => {
+    applyCanvasEdit: (request, signal) => {
+      if (queuedEdits >= 4) return Promise.resolve(createUnavailableCanvasEditResult({ roomId, reason: '当前房间的编辑队列已满。' }));
+      queuedEdits += 1;
       const runEdit = async () => {
+        const assertCanWrite = () => {
+          signal?.throwIfAborted();
+          if (closed || lifetime.signal.aborted || !hydrated || socket.connectionStatus !== 'online') throw new Error('Drew 尚未完成同步，无法写入画布。');
+          if (request.roomId !== roomId) throw new Error('编辑计划与协同房间不一致。');
+        };
         const previousMode = collaborationMode.get();
-        collaborationMode.set('readwrite');
+        let localResult: DrawlessCanvasEditResult | null = null;
         try {
-          const input = {
-            store,
-            request,
-            fallbackPageId: findCurrentPageId(store, identity.sessionId),
-            presence: {
-              updatePresence: (patch: CanvasEditPresencePatch) =>
-                updateCoworkerPresence({
-                  identity,
-                  localPresence: presence,
-                  patch,
-                }),
-            },
+          assertCanWrite();
+          const before = new Map(request.operations.flatMap(operation => 'shapeId' in operation
+            ? [[operation.shapeId, JSON.stringify(store.get(operation.shapeId as TLShapeId))] as const] : []));
+          const baseline = socket.getDocumentRevision();
+          collaborationMode.set('readwrite');
+          localResult = await performCanvasEditToStore({
+            store, request, fallbackPageId: findCurrentPageId(store, identity.sessionId), assertCanWrite,
+            presence: { updatePresence: (patch: CanvasEditPresencePatch) => updateCoworkerPresence({ identity, localPresence: presence, patch }) },
+          });
+          assertCanWrite();
+          const changedIds = [...localResult.createdRecordIds, ...localResult.updatedRecordIds].filter(id =>
+            before.get(id) !== JSON.stringify(store.get(id as TLShapeId)));
+          await socket.waitForRecords(changedIds, baseline, signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal);
+          return localResult;
+        } catch (error) {
+          return {
+            ...(localResult ?? createUnavailableCanvasEditResult({ roomId, reason: '没有修改画布。' })),
+            applied: false,
+            warnings: [error instanceof Error ? error.message : '无法确认画布修改。'],
+            summary: localResult?.applied ? '部分修改可能已经提交，但尚未得到服务器确认，请检查画布后再决定下一步。' : '没有提交画布修改。',
           };
-
-          return performCanvasEditToStore(input);
         } finally {
           collaborationMode.set(previousMode);
+          queuedEdits -= 1;
         }
       };
       const result = editQueue.then(runEdit, runEdit);
-      editQueue = result.then(
-        () => undefined,
-        () => undefined
-      );
+      editQueue = result.then(() => undefined, () => undefined);
       return result;
     },
     close: () => {
+      if (closed) return;
+      closed = true;
+      hydrated = false;
+      lifetime.abort();
+      load.reject(new Error('房间连接已关闭。'));
       unlistenStore();
       unlistenPresence();
       unlistenStatus();
@@ -497,107 +537,13 @@ function findCurrentPageId(store: TLStore, excludeSessionId?: DrawlessSessionId)
   return 'page:page' as TLPageId;
 }
 
-// sync-core 公开了 TLPersistentClientSocket 接口，但没有公开浏览器版 ClientWebSocketAdapter。
-// coworker 运行在 Node 中，所以这里实现一个最小 adapter：只负责连接、JSON 收发、重连和状态通知。
-class NodeWebSocketSyncAdapter implements TLPersistentClientSocket<object, object> {
-  connectionStatus: 'error' | 'offline' | 'online' = 'offline';
-
-  private socket: WebSocket | null = null;
-  private readonly assembler = new JsonChunkAssembler();
-  private readonly statusListeners = new Set<(event: TLSocketStatusChangeEvent) => void>();
-  private readonly messageListeners = new Set<(message: object) => void>();
-
-  constructor(private readonly getUri: () => string) {}
-
-  sendMessage(message: object) {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      throw new Error('Coworker sync socket is not open.');
-    }
-
-    // TLSocketRoom 接受普通 JSON 消息；大消息分片不是这个 PoC 的写入方向。
-    this.socket.send(JSON.stringify(message));
-  }
-
-  onReceiveMessage(callback: (message: object) => void) {
-    this.messageListeners.add(callback);
-    return () => {
-      this.messageListeners.delete(callback);
-    };
-  }
-
-  onStatusChange(callback: (event: TLSocketStatusChangeEvent) => void) {
-    this.statusListeners.add(callback);
-    return () => {
-      this.statusListeners.delete(callback);
-    };
-  }
-
-  restart() {
-    this.socket?.close();
-    this.setStatus({ status: 'offline' });
-
-    // WebSocket URI 每次重连时重新计算，后续可以在这里加入一次性 token 或签名。
-    const socket = new WebSocket(this.getUri());
-    this.socket = socket;
-    socket.on('open', () => {
-      this.setStatus({ status: 'online' });
-    });
-    socket.on('message', (data) => {
-      this.handleMessage(data);
-    });
-    socket.on('close', (code, reason) => {
-      if (code === 4099) {
-        this.setStatus({ status: 'error', reason: reason.toString() || 'UNKNOWN_ERROR' });
-        return;
-      }
-
-      this.setStatus({ status: 'offline' });
-    });
-    socket.on('error', (error) => {
-      this.setStatus({ status: 'error', reason: error.message });
-    });
-  }
-
-  close() {
-    this.socket?.close();
-    this.socket = null;
-    this.setStatus({ status: 'offline' });
-    this.statusListeners.clear();
-    this.messageListeners.clear();
-  }
-
-  private handleMessage(data: WebSocket.RawData) {
-    const message = Array.isArray(data) ? Buffer.concat(data).toString('utf8') : data.toString();
-    // server 可能发送 chunked JSON；JsonChunkAssembler 会等所有分片到齐后再返回完整消息。
-    const result = this.assembler.handleMessage(message);
-    if (!result) {
-      return;
-    }
-    if ('error' in result) {
-      this.setStatus({ status: 'error', reason: result.error.message });
-      return;
-    }
-
-    for (const listener of this.messageListeners) {
-      listener(result.data);
-    }
-  }
-
-  private setStatus(event: TLSocketStatusChangeEvent) {
-    if (this.connectionStatus === event.status) {
-      return;
-    }
-
-    this.connectionStatus = event.status;
-    for (const listener of this.statusListeners) {
-      listener(event);
-    }
-  }
-}
-
 export function createSyncRoomUri(input: {
   /** drawless server 的 HTTP 或 WebSocket 基础地址。 */
   serverUrl: string;
+  /** 自定义协同路由前缀。 */
+  syncRoute?: string | undefined;
+  /** 当前房间访问凭据。 */
+  accessToken?: string | undefined;
   /** 要连接的协同房间 ID。 */
   roomId: DrawlessRoomId;
   /** 当前客户端使用的 session ID。 */
@@ -606,8 +552,11 @@ export function createSyncRoomUri(input: {
   const url = new URL(input.serverUrl);
   // serverUrl 允许传 http(s) 或 ws(s)，这里统一转换成 WebSocket 协议。
   url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
-  url.pathname = joinUrlPath(url.pathname, 'sync', encodeURIComponent(input.roomId));
+  url.pathname = joinUrlPath(url.pathname, input.syncRoute ?? '/sync', encodeURIComponent(input.roomId));
+  url.search = '';
+  url.hash = '';
   url.searchParams.set('sessionId', input.sessionId);
+  if (input.accessToken) url.searchParams.set('accessToken', input.accessToken);
 
   return url.toString();
 }
@@ -692,5 +641,7 @@ function createDeferred<T>() {
     reject = promiseReject;
   });
 
+  // 不等待 hydration 的调用方也不能产生未处理的 Promise rejection。
+  void promise.catch(() => undefined);
   return { promise, resolve, reject };
 }

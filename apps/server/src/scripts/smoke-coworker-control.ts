@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 
+import { createRoomAccessToken } from "@drawless/shared";
 import type {
   DrawlessCoworkerRoomStatusResponse,
   DrawlessCoworkerStopResponse
@@ -11,7 +12,10 @@ import type {
 import { loadServerConfig } from "../config.js";
 import { createServerApp } from "../http/app.js";
 
+const roomSecret = "smoke-only-room-secret".repeat(3);
+const controlToken = "smoke-only-control-token".repeat(3);
 const roomId = process.env.DRAWLESS_COWORKER_ROOM_ID || "alpha";
+const roomToken = await createRoomAccessToken(roomId, roomSecret);
 const serverPort = await findAvailablePort();
 const coworkerPort = await findAvailablePort();
 const serverUrl = `http://127.0.0.1:${serverPort}`;
@@ -29,9 +33,11 @@ const config = {
   ...loadServerConfig({
     HOST: "127.0.0.1",
     PORT: String(serverPort),
-    SYNC_ROUTE: "/sync",
+    SYNC_ROUTE: "/collaboration",
     ALLOWED_ORIGINS: "http://127.0.0.1:3100",
     COWORKER_ENABLED: "true",
+    DRAWLESS_ROOM_ACCESS_SECRET: roomSecret,
+    COWORKER_CONTROL_TOKEN: controlToken,
     COWORKER_BASE_URL: coworkerUrl,
     SERVER_PUBLIC_URL: serverUrl,
     COWORKER_REQUEST_TIMEOUT_MS: "15000"
@@ -47,6 +53,18 @@ const { app, registry } = await createServerApp({ config, logger: false });
 try {
   await waitForCoworkerApi(coworkerUrl);
   await app.listen({ host: config.host, port: config.port });
+  const anonymous = await fetch(new URL(`/rooms/${roomId}/coworker/status`, serverUrl));
+  if (anonymous.status !== 401) throw new Error("匿名 server 请求未被拒绝");
+  const direct = await fetch(new URL(`/drawless/rooms/${roomId}/coworker/status`, coworkerUrl));
+  if (direct.status !== 401) throw new Error("匿名 runtime 请求未被拒绝");
+  const defaultApi = await fetch(new URL("/api/agents", coworkerUrl));
+  if (defaultApi.status !== 401) throw new Error("匿名 Mastra 管理请求未被拒绝");
+  const invalidTarget = await fetch(new URL(`/drawless/rooms/${roomId}/coworker/start`, coworkerUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${controlToken}` },
+    body: JSON.stringify({ serverUrl: "http://127.0.0.1:9" })
+  });
+  if (invalidTarget.status !== 400) throw new Error("任意 runtime 出站目标未被拒绝");
 
   const start = await postJson<DrawlessCoworkerRoomStatusResponse>(
     new URL(`/rooms/${roomId}/coworker/start`, serverUrl),
@@ -110,7 +128,11 @@ function startCoworkerProcess(input: {
     env: {
       ...process.env,
       PORT: String(input.port),
-      MASTRA_HOST: "127.0.0.1"
+      HOST: "127.0.0.1",
+      NODE_ENV: "production",
+      COWORKER_CONTROL_TOKEN: controlToken,
+      DRAWLESS_SYNC_SERVER_URL: serverUrl,
+      COWORKER_STORAGE_MODE: "memory"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -131,7 +153,8 @@ async function waitForCoworkerApi(baseUrl: string) {
   while (Date.now() < deadline) {
     try {
       const response = await fetch(
-        new URL(`/drawless/rooms/${roomId}/coworker/status`, baseUrl)
+        new URL(`/drawless/rooms/${roomId}/coworker/status`, baseUrl),
+        { headers: { authorization: `Bearer ${controlToken}` } }
       );
       if (response.ok) {
         return;
@@ -152,7 +175,7 @@ async function waitForCoworkerApi(baseUrl: string) {
 async function postJson<T>(url: URL, body: unknown) {
   const response = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", authorization: `Bearer ${roomToken}` },
     body: JSON.stringify(body)
   });
 
@@ -160,12 +183,12 @@ async function postJson<T>(url: URL, body: unknown) {
 }
 
 async function getJson<T>(url: URL) {
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: { authorization: `Bearer ${roomToken}` } });
   return readExpectedJson<T>(response);
 }
 
 async function deleteJson<T>(url: URL) {
-  const response = await fetch(url, { method: "DELETE" });
+  const response = await fetch(url, { method: "DELETE", headers: { authorization: `Bearer ${roomToken}` } });
   return readExpectedJson<T>(response);
 }
 

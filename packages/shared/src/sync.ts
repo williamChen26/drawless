@@ -21,6 +21,10 @@ export interface DrawlessSyncConfig {
 export interface DrawlessServerConfig {
   /** 服务监听的主机名或 IP。 */
   host: string;
+  /** 房间签名密钥；仅本机开发允许省略。 */
+  roomAccessSecret?: string | undefined;
+  /** 反向代理可信 IP 或 CIDR；默认不信任转发头。 */
+  trustedProxies?: string[] | undefined;
   /** 服务监听端口。 */
   port: number;
   /** tldraw 协同 WebSocket 路由前缀。 */
@@ -80,7 +84,7 @@ export interface DrawlessReadyResponse {
   /** 服务是否已准备接受协同连接。 */
   ready: true;
   /** 当前进程内房间注册表摘要。 */
-  rooms: DrawlessRoomRegistryStats;
+  rooms: Pick<DrawlessRoomRegistryStats, "roomCount">;
   /** 当前协同存储说明。 */
   storage: DrawlessStorageSummary;
 }

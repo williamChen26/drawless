@@ -1,3 +1,6 @@
+import { createRoomRequestContext, renewRoomRequestContext } from './room-authority';
+import { validateSyncTarget } from '../runtime-security';
+import type { DrawlessAgentStreamOutput } from './cursor-chat-reply-handler';
 import {
   canvasEditRequestSchema,
   canvasContextRequestSchema,
@@ -16,7 +19,7 @@ import {
   type DrawlessCoworkerStartRequest,
   type DrawlessCoworkerStopResponse,
   type DrawlessRoomId,
-} from '../../../../../packages/shared/src/index';
+} from '@drawless/shared';
 import {
   createDrawlessCoworkerRoomClient,
   type DrawlessCoworkerRoomClient,
@@ -48,6 +51,12 @@ type CoworkerRoomEntry = {
   updatedAt: string;
   /** 当前 room 的空闲回收 timer。 */
   idleTimer: ReturnType<typeof setTimeout> | null;
+  /** 房间停止时取消所有进行中的模型调用。 */
+  lifetime: AbortController;
+  /** 每个房间最多进行一个 AI 调用。 */
+  busy: boolean;
+  /** 当前房间生命周期的对话隔离标识。 */
+  conversationEpoch: string;
 };
 
 /**
@@ -59,12 +68,15 @@ export class DrawlessCoworkerRoomRegistry {
   // key 使用 roomId，保证每个 room 在当前 coworker 进程中最多只有一个常驻 client。
   private readonly entries = new Map<DrawlessRoomId, CoworkerRoomEntry>();
 
+  private readonly approvals = new Map<string, { roomId: string; toolCallId: string; expires: number; context: ReturnType<typeof createRoomRequestContext> }>();
+
   constructor(private readonly cursorChatReplyAgent: DrawlessCursorChatReplyAgent) {}
 
   async start(
     roomIdInput: string,
     request: DrawlessCoworkerStartRequest
   ): Promise<DrawlessCoworkerRoomStatusResponse> {
+    validateSyncTarget(request.serverUrl);
     const roomId = parseRoomIdOrThrow(roomIdInput);
     const existing = this.entries.get(roomId);
     if (existing && existing.status !== 'error' && existing.status !== 'stopped') {
@@ -81,6 +93,7 @@ export class DrawlessCoworkerRoomRegistry {
     if (existing) {
       this.disposeEntry(roomId, existing);
     }
+    if (this.entries.size >= 64) throw new Error("coworker 房间数量已达上限。");
     const now = new Date().toISOString();
     let entry!: CoworkerRoomEntry;
     let introCursorChatSent = false;
@@ -95,6 +108,13 @@ export class DrawlessCoworkerRoomRegistry {
     const client = createDrawlessCoworkerRoomClient({
       roomId,
       serverUrl: request.serverUrl,
+      syncRoute: request.syncRoute,
+      accessToken: request.accessToken,
+      onConnectionChange: (status) => {
+        if (!entry) return;
+        entry.status = status;
+        entry.updatedAt = new Date().toISOString();
+      },
       instanceId: request.instanceId,
       displayName: request.displayName,
       color: request.color,
@@ -108,7 +128,6 @@ export class DrawlessCoworkerRoomRegistry {
       },
       onRemoteChange: (snapshot, changedRecordIds) => {
         // 这里只保存轻量统计，不复制完整 tldraw document，避免制造第二套事实源。
-        entry.status = entry.status === 'error' ? entry.status : 'online';
         entry.snapshot = snapshot;
         entry.recentlyChangedRecordIds = mergeRecentRecordIds(
           changedRecordIds,
@@ -119,16 +138,12 @@ export class DrawlessCoworkerRoomRegistry {
       onCursorChat: (event) => {
         // cursor chat 不落库，不变成第二套对话事实源；这里只触发一次临时 AI 回复。
         this.touchEntry(roomId, entry);
-        console.info(
-          `[drawless coworker] observed cursor chat in ${roomId} from ${event.userName}: ${event.message}`
-        );
-        void replyToCursorChat({ client, event, agent: this.cursorChatReplyAgent })
-          .then(() => {
-            this.touchEntry(roomId, entry);
-          })
-          .catch((error) => {
-            console.warn('[drawless coworker] cursor chat reply failed', error);
-          });
+        if (entry.busy || event.message.length > 4000 || this.activeRunCount() >= 8) return;
+        entry.busy = true;
+        void replyToCursorChat({ client, event, agent: this.cursorChatReplyAgent,
+          threadId: `${roomId}:${entry.conversationEpoch}:cursor`,
+          signal: AbortSignal.any([entry.lifetime.signal, AbortSignal.timeout(60_000)]) })
+          .finally(() => { entry.busy = false; });
       },
       onSyncError: (reason) => {
         entry.status = 'error';
@@ -146,6 +161,9 @@ export class DrawlessCoworkerRoomRegistry {
       startedAt: now,
       updatedAt: now,
       idleTimer: null,
+      lifetime: new AbortController(),
+      busy: false,
+      conversationEpoch: crypto.randomUUID(),
     };
     // 先登记 entry，再等待 hydration；这样 status 路由能立刻看到 starting 状态。
     this.entries.set(roomId, entry);
@@ -179,7 +197,7 @@ export class DrawlessCoworkerRoomRegistry {
         reason: 'Drew 尚未进入这个 room，无法读取画布上下文。',
       });
     }
-    if (entry.status === 'error' || entry.status === 'stopped') {
+    if (entry.status !== 'online') {
       return createUnavailableCanvasContextSnapshot({
         roomId,
         reason: `Drew 的协同连接当前状态为 ${entry.status}，无法读取画布上下文。`,
@@ -195,7 +213,7 @@ export class DrawlessCoworkerRoomRegistry {
     });
   }
 
-  async applyCanvasEdit(requestInput: DrawlessCanvasEditRequest): Promise<DrawlessCanvasEditResult> {
+  async applyCanvasEdit(requestInput: DrawlessCanvasEditRequest, signal?: AbortSignal): Promise<DrawlessCanvasEditResult> {
     const request = canvasEditRequestSchema.parse(requestInput);
     const roomId = parseRoomIdOrThrow(request.roomId);
     const entry = this.entries.get(roomId);
@@ -212,7 +230,7 @@ export class DrawlessCoworkerRoomRegistry {
       });
     }
 
-    const result = await entry.client.applyCanvasEdit(request);
+    const result = await entry.client.applyCanvasEdit(request, signal);
     if (result.applied) {
       entry.snapshot = entry.client.getSnapshot();
       entry.recentlyChangedRecordIds = mergeRecentRecordIds(
@@ -231,44 +249,85 @@ export class DrawlessCoworkerRoomRegistry {
   ) {
     const request = coworkerConversationStreamRequestSchema.parse(requestInput);
     const roomId = parseRoomIdOrThrow(request.roomId);
+    return this.runConversation(roomId, options.abortSignal, false, (signal, requestContext) =>
+      this.cursorChatReplyAgent.stream(createConversationPrompt(request), {
+        activeTools: ['collect-canvas-context', 'edit-canvas'],
+        maxSteps: 6,
+        abortSignal: signal,
+        requestContext,
+        memory: { resource: roomId, thread: `${roomId}:${this.entries.get(roomId)!.conversationEpoch}:conversation` },
+      })
+    );
+  }
+
+  async approveConversationToolCall(roomIdInput: string, requestInput: DrawlessCoworkerConversationToolApprovalRequest, signal?: AbortSignal) {
+    return this.resumeConversation(roomIdInput, requestInput, true, signal);
+  }
+
+  async declineConversationToolCall(roomIdInput: string, requestInput: DrawlessCoworkerConversationToolApprovalRequest, signal?: AbortSignal) {
+    return this.resumeConversation(roomIdInput, requestInput, false, signal);
+  }
+
+  private async resumeConversation(roomIdInput: string, requestInput: DrawlessCoworkerConversationToolApprovalRequest, approved: boolean, signal?: AbortSignal) {
+    const roomId = parseRoomIdOrThrow(roomIdInput);
+    const request = coworkerConversationToolApprovalRequestSchema.parse(requestInput);
+    const key = `${request.runId}:${request.toolCallId}`;
+    const pending = this.approvals.get(key);
+    if (!pending || pending.roomId !== roomId || pending.expires <= Date.now()) throw new Error('审批不存在、房间不匹配或已过期。');
+    return this.runConversation(roomId, signal, approved, (abortSignal, requestContext) => {
+      // 先取得房间运行槽，再原子消费；繁忙/离线拒绝不会使仍可重试的审批丢失。
+      this.approvals.delete(key);
+      const resume = { ...request, abortSignal, requestContext };
+      return approved ? this.cursorChatReplyAgent.approveToolCall(resume) : this.cursorChatReplyAgent.declineToolCall(resume);
+    }, pending.context);
+  }
+
+  private activeRunCount() {
+    return [...this.entries.values()].filter((entry) => entry.busy).length;
+  }
+
+  private async runConversation(roomId: string, signal: AbortSignal | undefined, canWrite: boolean,
+    run: (signal: AbortSignal, context: ReturnType<typeof createRoomRequestContext>) => Promise<DrawlessAgentStreamOutput>, contextToResume?: ReturnType<typeof createRoomRequestContext>) {
     const entry = this.entries.get(roomId);
-    if (entry) {
-      this.touchEntry(roomId, entry);
-    }
-
-    return this.cursorChatReplyAgent.stream(createConversationPrompt(request), {
-      activeTools: ['collect-canvas-context', 'edit-canvas'],
-      maxSteps: 6,
-      abortSignal: options.abortSignal,
-      memory: {
-        resource: roomId,
-        thread: `${roomId}:conversation`,
-      },
-    });
-  }
-
-  async approveConversationToolCall(
-    roomIdInput: string,
-    requestInput: DrawlessCoworkerConversationToolApprovalRequest
-  ) {
-    parseRoomIdOrThrow(roomIdInput);
-    const request = coworkerConversationToolApprovalRequestSchema.parse(requestInput);
-    return this.cursorChatReplyAgent.approveToolCall({
-      runId: request.runId,
-      toolCallId: request.toolCallId,
-    });
-  }
-
-  async declineConversationToolCall(
-    roomIdInput: string,
-    requestInput: DrawlessCoworkerConversationToolApprovalRequest
-  ) {
-    parseRoomIdOrThrow(roomIdInput);
-    const request = coworkerConversationToolApprovalRequestSchema.parse(requestInput);
-    return this.cursorChatReplyAgent.declineToolCall({
-      runId: request.runId,
-      toolCallId: request.toolCallId,
-    });
+    if (!entry || entry.status !== 'online') throw new Error('房间尚未在线。');
+    if (entry.busy || this.activeRunCount() >= 8) throw new Error('AI 正在处理请求，请稍后重试。');
+    entry.busy = true;
+    this.touchEntry(roomId, entry);
+    const controller = new AbortController();
+    const combined = AbortSignal.any([controller.signal, entry.lifetime.signal, AbortSignal.timeout(120_000), ...(signal ? [signal] : [])]);
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      controller.abort();
+      entry.busy = false;
+    };
+    try {
+      combined.throwIfAborted();
+      const context = contextToResume ? renewRoomRequestContext(contextToResume, roomId, combined, canWrite) : createRoomRequestContext(roomId, combined, canWrite);
+      const result = await run(combined, context);
+      for (const [key, pending] of this.approvals) if (pending.expires <= Date.now()) this.approvals.delete(key);
+      const approvals = this.approvals;
+      const fullStream = result.fullStream;
+      return {
+        ...result,
+        cancel: release,
+        ...(fullStream ? { fullStream: (async function* () {
+          try {
+            for await (const chunk of fullStream) {
+              combined.throwIfAborted();
+              if (chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type === 'tool-call-approval') {
+                const event = chunk as { runId?: string; payload?: { runId?: string; toolCallId?: string; id?: string } };
+                const runId = event.runId ?? event.payload?.runId ?? result.runId;
+                const toolCallId = event.payload?.toolCallId ?? event.payload?.id;
+                if (runId && toolCallId && approvals.size < 1000) approvals.set(`${runId}:${toolCallId}`, { roomId, toolCallId, expires: Date.now() + 30 * 60_000, context });
+              }
+              yield chunk;
+            }
+          } finally { release(); }
+        })() } : {}),
+      };
+    } catch (error) { release(); throw error; }
   }
 
   stop(roomIdInput: string): DrawlessCoworkerStopResponse {
@@ -352,6 +411,8 @@ export class DrawlessCoworkerRoomRegistry {
       clearTimeout(entry.idleTimer);
       entry.idleTimer = null;
     }
+    entry.lifetime.abort();
+    for (const [key, pending] of this.approvals) if (pending.roomId === roomId) this.approvals.delete(key);
     entry.client.close();
     // stop 后释放本地引用；下一次 start 会以新的 sync client 重新进入 room。
     if (this.entries.get(roomId) === entry) {

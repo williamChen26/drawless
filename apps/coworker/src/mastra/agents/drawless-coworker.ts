@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { DRAWLESS_COWORKER_DISPLAY_NAME } from '../../../../../packages/shared/src/index';
+import { DRAWLESS_COWORKER_DISPLAY_NAME } from '@drawless/shared';
 import { canvasContextTool } from '../tools/canvas-context-tool';
 import { canvasEditTool } from '../tools/canvas-edit-tool';
 import { getCoworkerStorageMode } from '../coworker-runtime-config';

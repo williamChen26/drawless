@@ -173,7 +173,7 @@ describe("coworker conversation stream client", () => {
     });
     expect(fetcher).toHaveBeenCalledWith(
       "http://127.0.0.1:3001/rooms/alpha/coworker/approvals?status=pending",
-      { method: "GET" }
+      { method: "GET", headers: {} }
     );
   });
 

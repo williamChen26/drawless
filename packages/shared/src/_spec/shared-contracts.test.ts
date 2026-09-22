@@ -20,6 +20,8 @@ import {
   createDrawlessCoworkerSessionId,
   DRAWLESS_COWORKER_DISPLAY_NAME,
   DRAWLESS_COWORKER_ROLE_LABEL,
+  drawlessFeedbackRequestSchema,
+  drawlessFeedbackResponseSchema,
   parseDrawlessRoomId,
   parseDrawlessCoworkerSessionId,
   parseDrawlessSessionId,
@@ -39,6 +41,35 @@ describe("drawless shared contracts", () => {
       value: "device:tab-1"
     });
     expect(parseDrawlessSessionId("bad session").ok).toBe(false);
+  });
+
+  it("validates anonymous feedback without accepting canvas data", () => {
+    const request = drawlessFeedbackRequestSchema.parse({
+      submissionId: "11111111-1111-4111-8111-111111111111",
+      category: "bug",
+      message: "协作画布断线后没有自动恢复。",
+      surface: "canvas"
+    });
+
+    expect(request.category).toBe("bug");
+    expect(
+      drawlessFeedbackRequestSchema.safeParse({
+        ...request,
+        roomId: "private-room"
+      }).success
+    ).toBe(false);
+    expect(
+      drawlessFeedbackRequestSchema.safeParse({
+        ...request,
+        message: "太短"
+      }).success
+    ).toBe(false);
+    expect(
+      drawlessFeedbackResponseSchema.parse({
+        ok: true,
+        issueNumber: 12
+      })
+    ).toEqual({ ok: true, issueNumber: 12 });
   });
 
   it("validates coworker identity and session ids", () => {

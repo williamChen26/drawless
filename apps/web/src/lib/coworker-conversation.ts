@@ -1,3 +1,4 @@
+import { roomAccessHeaders } from "./room-access";
 import {
   DRAWLESS_COWORKER_DISPLAY_NAME,
   coworkerApprovalIdSchema,
@@ -104,7 +105,7 @@ export async function loadCoworkerApprovals(
     };
   }
 
-  const requestInit: RequestInit = { method: "GET" };
+  const requestInit: RequestInit = { method: "GET", headers: roomAccessHeaders() };
   if (input.signal) {
     requestInit.signal = input.signal;
   }
@@ -206,7 +207,7 @@ export async function createCoworkerConversationStream(input: {
 
   const requestInit: RequestInit = {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...roomAccessHeaders() },
     body: JSON.stringify({
       message: request.data.message,
       viewport: request.data.viewport ?? null
@@ -301,7 +302,7 @@ export async function createCoworkerApprovalResolutionStream(input: {
   const fetcher = resolveFetcher(input.fetcher);
   const requestInit: RequestInit = {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...roomAccessHeaders() },
     body: JSON.stringify(resolution.data)
   };
   if (input.signal) {

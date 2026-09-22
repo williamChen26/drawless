@@ -16,7 +16,7 @@ import {
   type DrawlessCanvasSummary,
   type DrawlessRoomId,
   type DrawlessSessionId,
-} from '../../../../../packages/shared/src/index';
+} from '@drawless/shared';
 
 type CreateCanvasContextInput = {
   /** coworker 所在的协同房间 ID。 */
@@ -470,7 +470,11 @@ function getShapeBounds(shape: TLShape): DrawlessCanvasBounds {
 
 function inferShapePageId(shape: TLShape, shapesById: Map<string, TLShape>): string | null {
   let parentId: string | undefined = shape.parentId;
+  const visited = new Set<string>([shape.id]);
   while (parentId) {
+    // 文档来自协作者；损坏或恶意的循环 parentId 不能阻塞整个 runtime。
+    if (visited.has(parentId)) return null;
+    visited.add(parentId);
     if (parentId.startsWith('page:')) {
       return parentId;
     }

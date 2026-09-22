@@ -2,9 +2,7 @@
 
 ## 对照输入
 
-- 纸带交接参考：`/Users/williamchen/.codex/generated_images/019f7d64-7f26-7293-957a-a7094b1ae7eb/exec-5aafa2d4-56ee-4d3a-a169-9e9129fd126a.png`
-- 场景化审批参考：`/Users/williamchen/.codex/generated_images/019f7d64-7f26-7293-957a-a7094b1ae7eb/exec-7e730841-37b7-4b22-9f31-467ecc61b7bc.png`
-- 纸张工作单参考：`/Users/williamchen/.codex/generated_images/019f7d64-7f26-7293-957a-a7094b1ae7eb/exec-bc27c331-d341-42c7-a681-fe5469cee789.png`
+- 纸带、场景审批和纸张工作单的历史生成参考图未纳入仓库；发布前需复核对照图中的素材来源。
 - 最终实现截图：`artifacts/design-audit/12-final-approval-with-plan.png`
 - 并排对照：`artifacts/design-audit/13-final-comparison.png`
 - 对照视口：1280 × 720

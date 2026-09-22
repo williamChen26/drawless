@@ -23,8 +23,7 @@ import {
 import { CoworkerConversationWindow } from "./coworker-conversation-window";
 import { useCoworkerControl } from "./coworker-control-state";
 
-const TLDRAW_LICENSE_KEY =
-  "tldraw-2026-09-30/WyJUSG9jenplMSIsWyIqIl0sMTYsIjIwMjYtMDktMzAiXQ.uxnHwI7nKxk3KwhNGpIcRZCphK02Kyhc4BDMbbZZ1FtJcYfIz0LgVY34aH50SH7RqyL7pFnbGgzuyydfbguWVg";
+const TLDRAW_LICENSE_KEY = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
 export function CanvasShell({ roomId }: { roomId: string }) {
   const isClientReady = useClientReady();
@@ -138,7 +137,7 @@ function SyncedCanvasShell({
       <div className="canvas-shell__editor" data-testid="tldraw-host">
         <Tldraw
           store={store}
-          licenseKey={TLDRAW_LICENSE_KEY}
+          {...(TLDRAW_LICENSE_KEY ? { licenseKey: TLDRAW_LICENSE_KEY } : {})}
           onMount={(editor) => {
             editorRef.current = editor;
           }}
