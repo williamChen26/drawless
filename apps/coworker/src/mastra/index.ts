@@ -1,3 +1,4 @@
+import { loadRuntimeSecurity, isControlRequestAllowed } from './runtime-security';
 
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
@@ -33,9 +34,21 @@ export const mastra = new Mastra({
 const registeredDrawlessCoworker = mastra.getAgentById('drawless-coworker');
 const coworkerRoomRegistry = new DrawlessCoworkerRoomRegistry(registeredDrawlessCoworker);
 setCanvasContextCollector((request) => coworkerRoomRegistry.collectCanvasContext(request));
-setCanvasEditExecutor((request) => coworkerRoomRegistry.applyCanvasEdit(request));
+setCanvasEditExecutor((request, signal) => coworkerRoomRegistry.applyCanvasEdit(request, signal));
 
+const security = loadRuntimeSecurity();
 mastra.setServer({
+  host: security.host,
+  middleware: async (c, next) => {
+    if (!isControlRequestAllowed(c.req.header("authorization"), security.token, c.req.header("origin"))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    // 默认 Mastra 管理接口不属于公开协议，生产仅开放受控房间 API。
+    if (process.env.NODE_ENV === "production" && !c.req.path.startsWith("/drawless/rooms/")) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    await next();
+  },
   apiRoutes: createCoworkerRoomApiRoutes(coworkerRoomRegistry),
 });
 
@@ -77,7 +90,7 @@ async function createCoworkerObservability() {
     MastraStorageExporter,
     SensitiveDataFilter,
   } = await import('@mastra/observability');
-  const exporters = [new MastraStorageExporter()];
+  const exporters: Array<InstanceType<typeof MastraStorageExporter> | InstanceType<typeof MastraPlatformExporter>> = [new MastraStorageExporter()];
   if (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim()) {
     // 只有明确配置 platform token 时才启用远端 exporter，避免本地或部署环境空转重试。
     exporters.push(new MastraPlatformExporter());

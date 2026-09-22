@@ -1,3 +1,5 @@
+import type { RequestContext } from '@mastra/core/request-context';
+import { createRoomRequestContext } from './room-authority';
 import type { ReadableStream } from 'node:stream/web';
 import type {
   DrawlessCoworkerCursorChatEvent,
@@ -16,6 +18,7 @@ export type DrawlessCursorChatReplyAgent = {
       activeTools?: string[];
       maxSteps?: number;
       abortSignal?: AbortSignal;
+      requestContext?: RequestContext;
     }
   ) => Promise<DrawlessAgentStreamOutput>;
   /** 用户确认需要审批的 tool call 后恢复 Mastra stream。 */
@@ -27,6 +30,8 @@ export type DrawlessCursorChatReplyAgent = {
 export type DrawlessAgentStreamOutput = {
   /** Mastra 当前 run ID，用于 web 后续确认 tool call。 */
   runId?: string | undefined;
+  /** 下游关闭流时释放本次请求。 */
+  cancel?: () => void;
   /** Mastra 正文文本流。 */
   textStream: ReadableStream<string>;
   /** Mastra 完整事件流；包含 tool-call、tool-result、approval 等事件。 */
@@ -38,6 +43,10 @@ export type DrawlessToolApprovalResumeRequest = {
   runId: string;
   /** 等待用户确认或拒绝的 tool call ID。 */
   toolCallId: string;
+  /** 恢复执行时由 runtime 重新授予的房间能力。 */
+  requestContext?: RequestContext;
+  /** 上游取消与房间生命周期信号。 */
+  abortSignal?: AbortSignal;
 };
 
 export type DrawlessCursorChatReplyInput = {
@@ -47,6 +56,10 @@ export type DrawlessCursorChatReplyInput = {
   event: DrawlessCoworkerCursorChatEvent;
   /** 用于生成 AI 回复的 Mastra agent。 */
   agent: DrawlessCursorChatReplyAgent;
+  /** 停止房间时取消 AI 请求。 */
+  signal?: AbortSignal;
+  /** 当前房间生命周期独立的对话线程。 */
+  threadId: string;
 };
 
 /**
@@ -74,9 +87,11 @@ export async function replyToCursorChat(input: DrawlessCursorChatReplyInput) {
     const result = await input.agent.stream(prompt, {
       activeTools: ['collect-canvas-context'],
       maxSteps: 4,
+      abortSignal: input.signal ?? AbortSignal.timeout(60_000),
+      requestContext: createRoomRequestContext(input.event.roomId, input.signal ?? AbortSignal.timeout(60_000)),
       memory: {
         resource: input.event.roomId,
-        thread: `${input.event.roomId}:cursor`,
+        thread: input.threadId,
       },
     });
     replyText = sanitizeCursorChatReply(
@@ -89,7 +104,7 @@ export async function replyToCursorChat(input: DrawlessCursorChatReplyInput) {
     );
   } catch (error) {
     // AI 调用失败时仍保持协同链路可验证，但不把错误伪装成真实 AI 判断。
-    console.warn('[drawless coworker] cursor chat AI reply failed', error);
+    console.warn('[drawless coworker] cursor chat AI reply failed');
     replyText = AI_ERROR_REPLY;
   }
 
@@ -148,10 +163,12 @@ async function readTextStream(stream: ReadableStream<string>, onChunk: (text: st
         break;
       }
 
+      if (chunks.join('').length + value.length > 4000) throw new Error('cursor 回复超过长度限制。');
       chunks.push(value);
       onChunk(chunks.join(''));
     }
   } finally {
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 

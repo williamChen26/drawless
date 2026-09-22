@@ -1,3 +1,4 @@
+import { assertRoomAuthority } from '../collaboration/room-authority';
 import { createTool } from '@mastra/core/tools';
 
 import {
@@ -5,7 +6,7 @@ import {
   canvasContextSnapshotSchema,
   type DrawlessCanvasContextRequest,
   type DrawlessCanvasContextSnapshot,
-} from '../../../../../packages/shared/src/index';
+} from '@drawless/shared';
 import { createUnavailableCanvasContextSnapshot } from './canvas-context-reader';
 
 type CanvasContextCollector = (
@@ -24,7 +25,8 @@ export const canvasContextTool = createTool({
     'Read the current drawless tldraw room context when the user asks about canvas content, selected objects, nearby cursor content, structure, arrows, frames, or recent canvas changes. This tool is read-only and never mutates the canvas.',
   inputSchema: canvasContextRequestSchema,
   outputSchema: canvasContextSnapshotSchema,
-  execute: async (request) => {
+  execute: async (request, context) => {
+    assertRoomAuthority(context?.requestContext, request.roomId, false);
     if (!canvasContextCollector) {
       // Mastra 初始化顺序异常时保持只读失败，不让模型误以为已经看到了画布。
       return createUnavailableCanvasContextSnapshot({

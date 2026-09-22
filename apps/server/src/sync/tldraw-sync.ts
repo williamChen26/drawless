@@ -56,8 +56,15 @@ export function attachTldrawSyncSocket(
     return { ok: false, reason: sessionId.reason };
   }
 
-  const room = registry.getOrCreateRoom(roomId.value);
-  const releaseRoomConnection = registry.registerConnection(roomId.value);
+  let room;
+  let releaseRoomConnection;
+  try {
+    room = registry.getOrCreateRoom(roomId.value);
+    releaseRoomConnection = registry.registerConnection(roomId.value);
+  } catch {
+    socket.close(1013, "Room capacity reached");
+    return { ok: false, reason: "Room capacity reached." };
+  }
   const releaseOnce = once(releaseRoomConnection);
   socket.once("close", releaseOnce);
   socket.once("error", releaseOnce);

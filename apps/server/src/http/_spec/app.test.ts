@@ -30,7 +30,7 @@ describe("server app", () => {
     expect(ready.json()).toMatchObject({
       ok: true,
       ready: true,
-      rooms: { roomCount: 0, roomIds: [] },
+      rooms: { roomCount: 0 },
       storage: { kind: "process-local-memory", durable: false }
     });
 
@@ -156,7 +156,7 @@ describe("server app", () => {
       const accepted = await app.inject({
         method: "POST",
         url: "/feedback",
-        headers: { origin: "http://127.0.0.1:3000" },
+        headers: { origin: "http://127.0.0.1:3000", "x-forwarded-for": `192.0.2.${submissionId[0]}` },
         payload: { ...basePayload, submissionId }
       });
       expect(accepted.statusCode, accepted.body).toBe(201);

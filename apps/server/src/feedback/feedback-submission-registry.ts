@@ -28,6 +28,7 @@ export function createFeedbackSubmissionRegistry(options?: {
   const entries = new Map<string, FeedbackSubmissionEntry>();
 
   function get(key: string) {
+    for (const [entryKey, value] of entries) if (value.expiresAt <= now()) entries.delete(entryKey);
     const entry = entries.get(key);
     if (!entry) {
       return null;
@@ -47,6 +48,7 @@ export function createFeedbackSubmissionRegistry(options?: {
         return existing;
       }
 
+      if (entries.size >= 10_000) return Promise.reject(new Error("反馈服务繁忙，请稍后重试。"));
       const result = action().catch((error: unknown) => {
         entries.delete(key);
         throw error;

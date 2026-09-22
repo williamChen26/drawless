@@ -1,5 +1,6 @@
 import {
   DRAWLESS_COWORKER_DISPLAY_NAME,
+  createRoomAccessToken,
   coworkerConversationToolApprovalRequestSchema,
   coworkerRoomStatusResponseSchema,
   coworkerStopResponseSchema,
@@ -27,17 +28,20 @@ export interface CoworkerControlClient {
   /** 向 coworker 发送 conversation chat 长对话请求并返回流式响应。 */
   streamConversation(
     roomId: DrawlessRoomId,
-    request: DrawlessCoworkerConversationStreamRequest
+    request: DrawlessCoworkerConversationStreamRequest,
+    signal?: AbortSignal
   ): Promise<Response>;
   /** 确认 conversation stream 中等待审批的 tool call，并返回续流响应。 */
   approveConversationToolCall(
     roomId: DrawlessRoomId,
-    request: DrawlessCoworkerConversationToolApprovalRequest
+    request: DrawlessCoworkerConversationToolApprovalRequest,
+    signal?: AbortSignal
   ): Promise<Response>;
   /** 拒绝 conversation stream 中等待审批的 tool call，并返回续流响应。 */
   declineConversationToolCall(
     roomId: DrawlessRoomId,
-    request: DrawlessCoworkerConversationToolApprovalRequest
+    request: DrawlessCoworkerConversationToolApprovalRequest,
+    signal?: AbortSignal
   ): Promise<Response>;
 }
 
@@ -63,6 +67,8 @@ export function createCoworkerControlClient(
       // web 只传用户可控项；server 在这里补齐 serverUrl 和默认超时，避免浏览器绕过控制面直连 coworker。
       const coworkerRequest: DrawlessCoworkerStartRequest = {
         serverUrl: config.serverUrl,
+        syncRoute: config.syncRoute,
+        accessToken: config.roomAccessSecret ? await createRoomAccessToken(roomId, config.roomAccessSecret) : undefined,
         instanceId: request.instanceId,
         displayName: request.displayName,
         color: request.color,
@@ -101,7 +107,7 @@ export function createCoworkerControlClient(
 
       return coworkerStopResponseSchema.parse(payload);
     },
-    streamConversation: async (roomId, request) => {
+    streamConversation: async (roomId, request, signal) => {
       const body = coworkerConversationStreamRequestSchema.parse({
         ...request,
         roomId
@@ -109,24 +115,27 @@ export function createCoworkerControlClient(
       return sendCoworkerStreamRequest({
         config,
         roomId,
+        signal,
         action: "conversation/stream",
         body
       });
     },
-    approveConversationToolCall: async (roomId, request) => {
+    approveConversationToolCall: async (roomId, request, signal) => {
       const body = coworkerConversationToolApprovalRequestSchema.parse(request);
       return sendCoworkerStreamRequest({
         config,
         roomId,
+        signal,
         action: createConversationToolApprovalAction(body, "approve"),
         body
       });
     },
-    declineConversationToolCall: async (roomId, request) => {
+    declineConversationToolCall: async (roomId, request, signal) => {
       const body = coworkerConversationToolApprovalRequestSchema.parse(request);
       return sendCoworkerStreamRequest({
         config,
         roomId,
+        signal,
         action: createConversationToolApprovalAction(body, "decline"),
         body
       });
@@ -141,6 +150,8 @@ async function sendCoworkerStreamRequest(input: {
   roomId: DrawlessRoomId;
   /** coworker custom API 的流式动作名称。 */
   action: string;
+  /** 浏览器关闭请求时取消上游。 */
+  signal?: AbortSignal | undefined;
   /** POST 请求体。 */
   body:
     | DrawlessCoworkerConversationStreamRequest
@@ -155,9 +166,9 @@ async function sendCoworkerStreamRequest(input: {
   try {
     const response = await fetch(createCoworkerUrl(input), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: controlHeaders(input.config),
       body: JSON.stringify(input.body),
-      signal: controller.signal
+      signal: input.signal ? AbortSignal.any([input.signal, controller.signal]) : controller.signal
     });
     if (!response.ok) {
       const payload = await readJson(response);
@@ -168,7 +179,21 @@ async function sendCoworkerStreamRequest(input: {
       );
     }
 
-    return response;
+    if (!response.body) return response;
+    // 头部超时结束后，整个正文仍有独立上限；下游断开会取消 fetch。
+    clearTimeout(timeout);
+    const bodyTimer = setTimeout(() => controller.abort(), 120_000);
+    const reader = response.body.getReader();
+    const cleanup = () => clearTimeout(bodyTimer);
+    return new Response(new ReadableStream<Uint8Array>({
+      async pull(stream) {
+        try {
+          const { done, value } = await reader.read();
+          if (done) { cleanup(); stream.close(); } else stream.enqueue(value);
+        } catch (error) { cleanup(); controller.abort(); stream.error(error); }
+      },
+      async cancel(reason) { cleanup(); controller.abort(); await reader.cancel(reason).catch(() => undefined); }
+    }), { status: response.status, headers: response.headers });
   } catch (error) {
     if (error instanceof CoworkerControlClientError) {
       throw error;
@@ -207,10 +232,10 @@ async function sendCoworkerRequest(input: {
   try {
     const requestInit: RequestInit = {
       method: input.method,
+      headers: controlHeaders(input.config),
       signal: controller.signal
     };
     if (input.body) {
-      requestInit.headers = { "content-type": "application/json" };
       requestInit.body = JSON.stringify(input.body);
     }
 
@@ -301,4 +326,8 @@ function joinUrlPath(...parts: string[]) {
     .map((part) => part.trim())
     .filter(Boolean)
     .join("/")}`;
+}
+
+function controlHeaders(config: DrawlessCoworkerControlConfig) {
+  return { "content-type": "application/json", ...(config.controlToken ? { authorization: `Bearer ${config.controlToken}` } : {}) };
 }

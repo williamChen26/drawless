@@ -1,5 +1,6 @@
 import {
   DRAWLESS_SYNC_ROUTE,
+  assertRoomAccessSecret,
   type DrawlessServerConfig
 } from "@drawless/shared";
 
@@ -7,8 +8,6 @@ export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 3001;
 export const DEFAULT_COWORKER_BASE_URL = "http://127.0.0.1:4111";
 export const DEFAULT_COWORKER_REQUEST_TIMEOUT_MS = 10_000;
-export const DEFAULT_FEEDBACK_REPOSITORY =
-  "williamChen26/drawless-feedback";
 export const DEFAULT_FEEDBACK_REQUEST_TIMEOUT_MS = 5_000;
 export const DEFAULT_ALLOWED_ORIGINS = [
   "http://127.0.0.1:3000",
@@ -19,6 +18,10 @@ export const DEFAULT_ALLOWED_ORIGINS = [
 
 export type ServerEnv = Partial<
   Record<
+    | "NODE_ENV"
+    | "DRAWLESS_ROOM_ACCESS_SECRET"
+    | "COWORKER_CONTROL_TOKEN"
+    | "TRUSTED_PROXIES"
     | "HOST"
     | "PORT"
     | "SYNC_ROUTE"
@@ -58,13 +61,27 @@ export function loadServerConfig(
   const port = parsePort(env.PORT);
   const coworkerEnabled = parseBoolean(env.COWORKER_ENABLED, false);
 
+  const roomAccessSecret = env.DRAWLESS_ROOM_ACCESS_SECRET?.trim();
+  const publicMode = env.NODE_ENV === "production" || !["127.0.0.1", "localhost", "::1"].includes(host);
+  if (publicMode && !roomAccessSecret) throw new Error("公开部署必须配置 DRAWLESS_ROOM_ACCESS_SECRET。");
+  if (roomAccessSecret) assertRoomAccessSecret(roomAccessSecret);
+  const controlToken = env.COWORKER_CONTROL_TOKEN?.trim();
+  if (coworkerEnabled && publicMode && (!controlToken || controlToken.length < 32)) {
+    throw new Error("公开部署启用 coworker 必须配置至少 32 字符的 COWORKER_CONTROL_TOKEN。");
+  }
+
   return {
     host,
+    roomAccessSecret,
+    trustedProxies: env.TRUSTED_PROXIES?.split(",").map((value) => value.trim()).filter(Boolean),
     port,
     syncRoute: parseSyncRoute(env.SYNC_ROUTE),
     allowedOrigins: parseAllowedOrigins(env.ALLOWED_ORIGINS),
     coworker: {
       enabled: coworkerEnabled,
+      controlToken,
+      roomAccessSecret,
+      syncRoute: parseSyncRoute(env.SYNC_ROUTE),
       baseUrl:
         parseOptionalServiceUrl(env.COWORKER_BASE_URL) ??
         (coworkerEnabled ? DEFAULT_COWORKER_BASE_URL : null),
@@ -89,7 +106,7 @@ export function loadFeedbackServerConfig(
   }
 
   const repository =
-    env.GITHUB_FEEDBACK_REPOSITORY?.trim() || DEFAULT_FEEDBACK_REPOSITORY;
+    env.GITHUB_FEEDBACK_REPOSITORY?.trim() || "";
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(repository)) {
     throw new Error(
       "GITHUB_FEEDBACK_REPOSITORY must use the owner/repository format."
@@ -213,7 +230,7 @@ function parseOptionalServiceUrl(value: string | undefined): string | null {
   const url = value.trim();
   try {
     const parsed = new URL(url);
-    if (!["http:", "https:", "ws:", "wss:"].includes(parsed.protocol)) {
+    if (!["http:", "https:"].includes(parsed.protocol)) {
       throw new Error("unsupported protocol");
     }
   } catch {

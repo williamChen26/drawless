@@ -31,6 +31,12 @@ export function createFeedbackRateLimiter(options?: {
   return {
     consume(key) {
       const currentTime = now();
+      for (const [entryKey, times] of requestsByKey) {
+        if ((times.at(-1) ?? 0) + windowMs <= currentTime) requestsByKey.delete(entryKey);
+      }
+      if (!requestsByKey.has(key) && requestsByKey.size >= 10_000) {
+        return { ok: false, retryAfterSeconds: Math.ceil(windowMs / 1000) };
+      }
       const recentRequests = (requestsByKey.get(key) ?? []).filter(
         (requestedAt) => currentTime - requestedAt < windowMs
       );

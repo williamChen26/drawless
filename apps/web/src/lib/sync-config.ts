@@ -1,3 +1,4 @@
+import { getRoomAccessToken } from "./room-access";
 import {
   DRAWLESS_SYNC_ROUTE,
   parseDrawlessRoomId,
@@ -6,7 +7,7 @@ import {
 } from "@drawless/shared";
 
 const DEFAULT_SYNC_SERVER_URL = "ws://127.0.0.1:3001";
-const SYNC_ROUTE_PATH = DRAWLESS_SYNC_ROUTE;
+const SYNC_ROUTE_PATH = process.env.NEXT_PUBLIC_DRAWLESS_SYNC_ROUTE || DRAWLESS_SYNC_ROUTE;
 
 export type SyncConfigErrorCode =
   | "INVALID_SERVER_URL"
@@ -129,6 +130,8 @@ function buildSyncRoomUri(input: {
   url.pathname = joinUrlPath(url.pathname, SYNC_ROUTE_PATH, roomValidation.value);
   url.search = "";
   url.hash = "";
+  const accessToken = getRoomAccessToken();
+  if (accessToken) url.searchParams.set("accessToken", accessToken);
 
   return { ok: true, value: url.toString() };
 }

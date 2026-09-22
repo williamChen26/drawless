@@ -44,6 +44,10 @@ export type DrawlessCoworkerRoomSessionStatus =
 export interface DrawlessCoworkerStartRequest {
   /** drawless server 的 HTTP 或 WebSocket 基础地址。 */
   serverUrl: string;
+  /** 协同路由前缀。 */
+  syncRoute?: string | undefined;
+  /** 仅供 runtime 连接该房间的签名凭据。 */
+  accessToken?: string | undefined;
   /** coworker 当前运行实例 ID；不传时由 coworker 自动生成。 */
   instanceId?: string | undefined;
   /** coworker 在协同身份中展示的名称；不传时使用默认名称。 */
@@ -88,6 +92,12 @@ export interface DrawlessCoworkerControlConfig {
   serverUrl: string;
   /** server 调用 coworker 控制面的超时时间，单位毫秒。 */
   requestTimeoutMs: number;
+  /** server 与 runtime 之间的内部认证令牌。 */
+  controlToken?: string | undefined;
+  /** 房间签名密钥，仅供 server 为 runtime 签发连接凭据。 */
+  roomAccessSecret?: string | undefined;
+  /** 协同路由前缀。 */
+  syncRoute?: string | undefined;
 }
 
 /**
@@ -181,6 +191,8 @@ const serverUrlSchema = z
 
 export const coworkerStartRequestSchema = z.object({
   serverUrl: serverUrlSchema,
+  syncRoute: z.string().regex(/^\/[A-Za-z0-9/_-]+$/u).optional(),
+  accessToken: z.string().max(256).optional(),
   instanceId: z.string().trim().min(1).optional(),
   displayName: z.string().trim().min(1).optional(),
   color: z.string().trim().min(1).optional(),
@@ -193,7 +205,13 @@ export const coworkerControlConfigSchema = z.object({
   enabled: z.boolean(),
   baseUrl: serverUrlSchema.nullable(),
   serverUrl: serverUrlSchema,
-  requestTimeoutMs: z.number().int().min(500).max(60_000)
+  requestTimeoutMs: z.number().int().min(500).max(60_000),
+  /** server 与 runtime 之间的内部凭据。 */
+  controlToken: z.string().optional(),
+  /** server 端签名密钥，不能返回浏览器。 */
+  roomAccessSecret: z.string().min(32).optional(),
+  /** 实际 sync 路由前缀。 */
+  syncRoute: z.string().regex(/^\/[A-Za-z0-9/_-]+$/u).optional()
 }) satisfies z.ZodType<DrawlessCoworkerControlConfig>;
 
 export const serverCoworkerStartRequestSchema = z.object({

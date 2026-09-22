@@ -31,6 +31,8 @@ describe("server config", () => {
     expect(
       loadServerConfig({
         HOST: "0.0.0.0",
+        DRAWLESS_ROOM_ACCESS_SECRET: "room-test-secret".repeat(3),
+        COWORKER_CONTROL_TOKEN: "control-test-secret".repeat(3),
         PORT: "3002",
         COWORKER_ENABLED: "true",
         COWORKER_BASE_URL: "http://127.0.0.1:4111/",
@@ -54,20 +56,20 @@ describe("server config", () => {
   it("keeps GitHub feedback disabled until a server-only token is configured", () => {
     expect(loadFeedbackServerConfig({})).toEqual({ enabled: false });
     expect(() =>
-      loadFeedbackServerConfig({ FEEDBACK_ENABLED: "true" })
+      loadFeedbackServerConfig({ FEEDBACK_ENABLED: "true", GITHUB_FEEDBACK_REPOSITORY: "example/feedback" })
     ).toThrow("GITHUB_FEEDBACK_TOKEN");
 
     expect(
       loadFeedbackServerConfig({
         FEEDBACK_ENABLED: "true",
         GITHUB_FEEDBACK_REPOSITORY:
-          "williamChen26/drawless-feedback",
+          "example/feedback",
         GITHUB_FEEDBACK_TOKEN: "test-token",
         FEEDBACK_REQUEST_TIMEOUT_MS: "6000"
       })
     ).toEqual({
       enabled: true,
-      repository: "williamChen26/drawless-feedback",
+      repository: "example/feedback",
       token: "test-token",
       requestTimeoutMs: 6000
     });

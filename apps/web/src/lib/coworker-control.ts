@@ -1,3 +1,4 @@
+import { roomAccessHeaders } from "./room-access";
 import {
   DRAWLESS_COWORKER_DISPLAY_NAME,
   coworkerRoomStatusResponseSchema,
@@ -224,9 +225,9 @@ function createRequestInit(input: {
   method: "POST" | "GET" | "DELETE";
   body?: DrawlessServerCoworkerStartRequest | undefined;
 }): RequestInit {
-  const request: RequestInit = { method: input.method };
+  const request: RequestInit = { method: input.method, headers: roomAccessHeaders() };
   if (input.body) {
-    request.headers = { "content-type": "application/json" };
+    request.headers = { "content-type": "application/json", ...roomAccessHeaders() };
     request.body = JSON.stringify(input.body);
   }
 

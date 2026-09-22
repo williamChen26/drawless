@@ -1,6 +1,6 @@
 # drawless Agent 工作说明
 
-本文件给后续参与 drawless 的 agent 使用。当前阶段的核心任务是梳理项目逻辑和需求逻辑，不做 UI 优化。
+本文件给后续参与 drawless 的 agent 使用。当前阶段的核心任务是完善已有协同和 coworker 能力的安全、可靠性及开源文档，不做 UI 优化。
 
 ## 当前优先级
 
@@ -12,7 +12,7 @@
 
 ## 工作原则
 
-- 不新增 AI 行为，除非用户明确要求开始接入 AI。
+- 不新增 AI 行为，除非用户明确要求；允许修复已经存在的聊天、观察、审批和编辑链路。
 - 不新增复杂 UI 组件、动效、主题、品牌视觉。
 - 不把业务契约散落在 web/server 包里；跨包结构优先放入 `packages/shared`。
 - 修改 shared 类型时，每个属性都要写中文注释。
@@ -23,7 +23,8 @@
 ## 目录约定
 
 - `apps/web`：只放前端路由、tldraw 挂载、协同客户端、浏览器身份。
-- `apps/server`：只放后端健康检查、就绪检查、WebSocket sync、房间注册表。
+- `apps/server`：后端健康检查、就绪检查、WebSocket sync、房间注册表、访问校验、审批与 runtime 代理。
+- `apps/coworker`：已有 Mastra runtime、独立协同客户端和受控画布工具。
 - `packages/shared`：放共享类型、Zod schema、跨端校验和后续 AI 扩展点。
 
 ## UI 约束
@@ -39,7 +40,7 @@
 
 ## AI 约束
 
-当前 AI 功能不启用。后续接入 AI 时：
+已有 AI 功能通过 `COWORKER_ENABLED` 显式启用，默认关闭。修改相关能力时：
 
 - 先设计 shared 契约。
 - 再设计服务端或受控前端边界。

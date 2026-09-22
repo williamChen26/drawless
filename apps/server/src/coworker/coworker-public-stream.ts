@@ -42,20 +42,22 @@ export function createCoworkerPublicEventStream(input: {
   const transformEvent = (block: string) => {
     const data = readSseData(block);
     if (!data) {
-      return ensureSseDelimiter(block);
+      return "";
     }
 
     let event: unknown;
     try {
       event = JSON.parse(data) as unknown;
     } catch {
-      return ensureSseDelimiter(block);
+      return "";
     }
     if (!isRecord(event)) {
-      return encodePublicEvent(event);
+      return "";
     }
 
     const type = getStringField(event, "type") ?? "message";
+    if (!["text-start", "text-delta", "text-end", "tool-call", "tool-result", "tool-call-approval", "tool-error", "error", "finish", "start", "step-start", "step-finish"].includes(type)) return "";
+    if (type === "error" || type === "tool-error") return encodePublicStreamError("AI 请求未完成，请重试。");
     const payload = getObjectField(event, "payload");
     const runtimeToolCallId = getRuntimeToolCallId(event, payload);
     const runtimeRunId =
@@ -110,6 +112,7 @@ export function createCoworkerPublicEventStream(input: {
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         buffer += decoder.decode(chunk, { stream: true });
+        if (buffer.length > 1024 * 1024) throw new Error("Coworker stream event exceeds size limit.");
         const completed = takeCompletedSseBlocks(buffer);
         buffer = completed.remainder;
         for (const block of completed.blocks) {
@@ -172,7 +175,7 @@ function sanitizeRuntimeEvent(
     approval: unknown;
   }
 ) {
-  const next: Record<string, unknown> = { ...event };
+  const next: Record<string, unknown> = publicFields(event);
   delete next.runId;
   delete next.toolCallId;
 
@@ -185,7 +188,7 @@ function sanitizeRuntimeEvent(
 
   const payload = getObjectField(event, "payload");
   if (payload) {
-    const nextPayload: Record<string, unknown> = { ...payload };
+    const nextPayload: Record<string, unknown> = publicFields(payload);
     delete nextPayload.runId;
     delete nextPayload.toolCallId;
     if (
@@ -310,4 +313,16 @@ function getUnknownField(input: unknown, key: string) {
 function getStringField(input: unknown, key: string) {
   const value = isRecord(input) ? input[key] : null;
   return typeof value === "string" ? value : null;
+}
+
+// 明确允许的展示字段；不把 runtime 元数据、堆栈或 provider 请求透传给浏览器。
+function publicFields(input: Record<string, unknown>): Record<string, unknown> {
+  const allowed = new Set(["type", "id", "text", "textDelta", "delta", "payload", "toolName", "name", "args", "input", "result", "output", "finishReason"]);
+  return Object.fromEntries(Object.entries(input).filter(([key]) => allowed.has(key)).map(([key, value]) => [key, scrubPrivateFields(value)]));
+}
+function scrubPrivateFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(scrubPrivateFields);
+  if (!isRecord(value)) return value;
+  const privateFields = new Set(["runId", "toolCallId", "stack", "request", "response", "headers", "apiKey", "authorization", "providerMetadata", "requestContext", "system", "messages", "traceId", "spanId"]);
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !privateFields.has(key)).map(([key, nested]) => [key, scrubPrivateFields(nested)]));
 }
